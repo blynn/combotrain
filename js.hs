@@ -5,7 +5,7 @@ import Data.Array
 import Haste
 import Haste.Graphics.Canvas
 
-bnds = ((0,0), (3,3)); frameCnt = 8
+bnds = ((0,0), (3,3)); frameCnt = 8; sz = 64
 
 data Anim = Ready | Solved | Slide { frame :: Int, r0 :: Int, c0 :: Int, r :: Int, c :: Int } deriving Eq
 
@@ -21,12 +21,12 @@ handle board (KeyDown sym) = let
 
 handle board (Click x y) = let
   (r0, c0) = head [i | i <- range bnds, board!i == 16]
-  (r, c) = (y `div` 32, x `div` 32)
+  (r, c) = (y `div` sz, x `div` sz)
   in if inRange bnds (r, c) && (r == r0 && abs (c - c0) == 1 || c == c0 && abs (r - r0) == 1) then Slide 0 r0 c0 r c else Ready
 
 parity [] = 0
 parity (16:xs) = parity xs + (length xs `div` 4)
-parity (x:xs) = sum [1 | y <- xs, x > y] + parity xs
+parity (x:xs) = length (filter (x>) xs) + parity xs
 
 gen = do
   seed <- newSeed
@@ -55,18 +55,18 @@ main = do
     q <- takeMVar evq
     putMVar evq (q ++ [KeyDown _k])
   let
-    tile x y n = let grey = if n == 16 then 0 else 255 - 15*(n - 1) in color (RGB grey grey grey) $ fill $ rect (fromIntegral x, fromIntegral y) (32 + fromIntegral x, 32 + fromIntegral y)
+    tile x y n = let grey = if n == 16 then 0 else 255 - 15*(n - 1) in color (RGB grey grey grey) $ fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral $ x + sz, fromIntegral $ y + sz)
     animate board Ready = if isSolved board then alert "A WINNER IS YOU!" >> return (board, Solved) else return (board, Ready)
     animate board Solved = return (board, Solved)
     animate board slide@(Slide frame r0 c0 r c) = renderOnTop canvas $ do
-      tile (32*c) (32*r) 16
-      tile (32*c + 32*(c0 - c) * frame `div` frameCnt)
-           (32*r + 32*(r0 - r) * frame `div` frameCnt) (board!(r,c))
+      tile (sz*c) (sz*r) 16
+      tile (sz*c + sz*(c0 - c) * frame `div` frameCnt)
+           (sz*r + sz*(r0 - r) * frame `div` frameCnt) (board!(r,c))
       return (if frame == frameCnt - 1 then
         (board // [((r,c), board!(r0,c0)), ((r0,c0), board!(r,c))], Ready) else
         (board, slide{frame = (frame + 1)}))
     loop board anim = do
-      render canvas $ sequence_ [tile (32*c) (32*r) (board!(r, c)) | (r, c) <- range bnds]
+      render canvas $ sequence_ [tile (sz*c) (sz*r) (board!(r, c)) | (r, c) <- range bnds]
       (board1, anim1) <- animate board anim
       anim2 <- eventLoop board1 anim1
       if anim2 == Solved then newGame else setTimeout 10 $ loop board1 anim2

@@ -6,7 +6,7 @@ import Graphics.UI.SDL as SDL
 import Graphics.UI.SDL.Color
 import Graphics.UI.SDL.Primitives
 
-bnds = ((0,0), (3,3)); frameCnt = 8
+bnds = ((0,0), (3,3)); frameCnt = 8; sz = 64
 
 data Anim = Ready | Solved | Slide { frame :: Int, r0 :: Int, c0 :: Int, r :: Int, c :: Int } deriving Eq
 
@@ -22,28 +22,28 @@ key board sym = let
 
 parity [] = 0
 parity (16:xs) = parity xs + (length xs `div` 4)
-parity (x:xs) = sum [1 | y <- xs, x > y] + parity xs
+parity (x:xs) = length (filter (x>) xs) + parity xs
 
 gen = do x <- shuffleM [1..16]; if parity x `mod` 2 == 0 then return x else gen
 
 isSolved board = and [board!i == 4*r + c + 1 | i@(r, c) <- range bnds]
 
 main = withInit [InitEverything] $ do
-  screen <- setVideoMode 128 128 32 [SWSurface]
+  screen <- setVideoMode (4*sz) (4*sz) 32 [SWSurface]
   let
-    tile x y n = box screen (Rect x y (31 + x) (31 + y)) $ Pixel $ fromIntegral
+    tile x y n = box screen (Rect x y (sz-1 + x) (sz-1 + y)) $ Pixel $ fromIntegral
       (255 + if n == 16 then 0 else ((255 - 15*(n - 1)) * (2^24 + 2^16 + 2^8)))
     animate board Ready = if isSolved board then putStrLn "A winner is you!" >> return (board, Solved) else return (board, Ready)
     animate board Solved = return (board, Solved)
     animate board slide@(Slide frame r0 c0 r c) = do
-      tile (32*c) (32*r) 16
-      tile (32*c + 32*(c0 - c) * frame `div` frameCnt)
-           (32*r + 32*(r0 - r) * frame `div` frameCnt) (board!(r,c))
+      tile (sz*c) (sz*r) 16
+      tile (sz*c + sz*(c0 - c) * frame `div` frameCnt)
+           (sz*r + sz*(r0 - r) * frame `div` frameCnt) (board!(r,c))
       return (if frame == frameCnt - 1 then
         (board // [((r,c), board!(r0,c0)), ((r0,c0), board!(r,c))], Ready) else
         (board, slide{frame = (frame + 1)}))
     loop board anim = do
-      sequence_ [tile (32*c) (32*r) (board!(r, c)) | (r, c) <- range bnds]
+      sequence_ [tile (sz*c) (sz*r) (board!(r, c)) | (r, c) <- range bnds]
       (board1, anim1) <- animate board anim
       SDL.flip screen
       (quit, anim2) <- eventLoop board1 anim1
