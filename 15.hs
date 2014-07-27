@@ -33,6 +33,8 @@ main = withInit [InitEverything] $ do
   let
     tile x y n = box screen (Rect x y (31 + x) (31 + y)) $ Pixel $ fromIntegral
       (255 + if n == 16 then 0 else ((255 - 15*(n - 1)) * (2^24 + 2^16 + 2^8)))
+    animate board Ready = if isSolved board then putStrLn "A winner is you!" >> return (board, Solved) else return (board, Ready)
+    animate board Solved = return (board, Solved)
     animate board slide@(Slide frame r0 c0 r c) = do
       tile (32*c) (32*r) 16
       tile (32*c + 32*(c0 - c) * frame `div` frameCnt)
@@ -40,8 +42,6 @@ main = withInit [InitEverything] $ do
       return (if frame == frameCnt - 1 then
         (board // [((r,c), board!(r0,c0)), ((r0,c0), board!(r,c))], Ready) else
         (board, slide{frame = (frame + 1)}))
-    animate board Ready = if isSolved board then putStrLn "A winner is you!" >> return (board, Solved) else return (board, Ready)
-    animate board Solved = return (board, Solved)
     loop board anim = do
       sequence_ [tile (32*c) (32*r) (board!(r, c)) | (r, c) <- range bnds]
       (board1, anim1) <- animate board anim
