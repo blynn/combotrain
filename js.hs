@@ -42,10 +42,8 @@ isSolved board = and [board!i == 4*r + c + 1 | i@(r, c) <- range bnds]
 
 data Event = KeyDown Int | Click Int Int
 
-main = do
-  Just canvasElem <- elemById "canvas"
+main = withElems ["body", "canvas"] $ \[body, canvasElem] -> do
   Just canvas <- getCanvas canvasElem
-  Just body <- elemById "body"
   evq <- newEmptyMVar
   putMVar evq []
   canvasElem  `onEvent` OnMouseDown $ \_button (x, y) -> do
@@ -71,8 +69,7 @@ main = do
       anim2 <- eventLoop board1 anim1
       if anim2 == Solved then newGame else setTimeout 10 $ loop board1 anim2
     eventLoop board anim = do
-      q <- takeMVar evq
-      putMVar evq []
+      q <- swapMVar evq []
       if null q || anim == Solved then return anim else return $ handle board (head q)
     newGame = do
       x <- gen

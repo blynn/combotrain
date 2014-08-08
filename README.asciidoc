@@ -6,3 +6,5 @@ darkest going left to right, top to bottom.
 
 One program uses https://www.libsdl.org/[the SDL library], and the other uses
 http://haste-lang.org/[the Haste compiler] to produce JavaScript.
+
+https://crypto.stanford.edu/~blynn/15[Play now!]
