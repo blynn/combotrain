@@ -36,7 +36,7 @@ move (Game board0 Play player) i = let board = board0 // [(i, player)] in
         :  map and [[board!(x,y) == player | x <- [0..2]] | y <- [0..2]]
         ++ map and [[board!(y,x) == player | x <- [0..2]] | y <- [0..2]] then
     Game board Won player
-  else if and [board!(x,y) /= '.' | x <- [0..2], y <- [0..2]] then
+  else if and [board!i /= '.' | i <- range bnds] then
     Game board Draw player
   else
     Game board Play (nextPlayer player)
@@ -47,9 +47,9 @@ nextMoves game@(Game board status player) = (game, case status of
 
 gameTree = unfoldTree nextMoves 
 
-score game@(Game _ status player) = case status of
-  Won -> if player == 'X' then -1 else 1
-  _ -> 0
+score (Game _ Won 'X') = -1
+score (Game _ Won 'O') = 1
+score _ = 0
 
 maximize (Node leaf []) = score leaf
 maximize (Node _ kids) = maximum (map minimize kids)
@@ -61,6 +61,14 @@ best (x:xs) = let
   f [] n bestYet = bestYet
   f (x:xs) n bestYet = let n' = minimize ( gameTree x ) in if n' > n then f xs n' x else f xs n bestYet
   in f xs (minimize $ gameTree x) x
+
+handle game@(Game board status player) (MouseDown x y) = let
+  j = (x `div` sz, y `div` sz)
+  in if status == Play && inRange bnds j && board!j == '.' then move game j else game
+
+handle game (KeyDown sym) = case sym of
+  113 -> initGame
+  _ -> game
 
 main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] -> do
   xo <- loadBitmap "xo.png"
@@ -101,14 +109,6 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
       -- Draw nought or cross when present.
       when (c == 'X') $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect 0 0 sz sz)
       when (c == 'O') $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect sz 0 sz sz)
-
-    handle game@(Game board status player) (MouseDown x y) = let
-      j = (x `div` sz, y `div` sz)
-      in if status == Play && inRange bnds j && board!j == '.' then move game j else game
-
-    handle game (KeyDown sym) = case sym of
-      113 -> initGame
-      _ -> game
 
     aiMove :: Game -> IO Game
     aiMove game@(Game _ Play 'O') = let moves = snd $ nextMoves game in
