@@ -1,1 +1,3 @@
-tictactoe.js : tictactoe.hs ; hastec $^
+.PHONY: all
+all: tictactoe.js netwalk.js
+%.js : %.hs ; hastec $^

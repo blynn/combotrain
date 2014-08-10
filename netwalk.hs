@@ -31,9 +31,21 @@ main = withElems ["body", "canvas"] $ \[body, canvasElem] -> do
   Just canvas <- getCanvas canvasElem
   seed <- newSeed
   let
+    lineB :: Int -> Int -> Int -> Int -> Shape ()
+    lineB x y dx dy = line (0.5 + fromIntegral x, 0.5 + fromIntegral y) (0.5 + fromIntegral (x + dx), 0.5 + fromIntegral (y + dy))
+    rectB :: Int -> Int -> Int -> Int -> Picture ()
+    rectB x y dx dy = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + dx), fromIntegral (y + dy))
+    rectC :: Int -> Int -> Int -> Int -> Picture ()
+    rectC x y dx dy = stroke $ rect (fromIntegral x - 0.5, fromIntegral y - 0.5) (fromIntegral (x + dx) + 0.5, fromIntegral (y + dy) + 0.5)
+
     board = gen [tileTop, tileBot] (blankBoard // [(srcTop, tileTop), (srcBot, tileBot)]) $ randomRs (0, 2^20 :: Int) seed
     drawTile Blank = return ()
-    drawTile (Tile (x,y) ds) = let (ox,oy) = ((fromIntegral x*32) :: Double, (fromIntegral y*32) :: Double) in sequence_ [ stroke $ line (ox + 16, oy + 16) (ox + 16 + 16 * fromIntegral dx, oy + 16 + 16 * fromIntegral dy) | (dx,dy) <- ds ]
+    drawTile (Tile (x,y) ds) = let (ox,oy) = (x*32, y*32) in sequence_ [ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds ]
     in do
-      render canvas $ sequence_ [drawTile (board!i) | i <- range bnds]
-
+      render canvas $ color (RGB 192 192 192) $ sequence_
+        $ [ stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
+        ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
+      renderOnTop canvas $ color (RGB 255 0 0) $ sequence_
+        $ [drawTile (board!i) | i <- range bnds]
+      renderOnTop canvas $ color (RGB 0 0 255) $ let (x,y) = srcTop in rectB (x * 32 + 8) (y * 32 + 8) 16 48
+      renderOnTop canvas $ color (RGB 0 0 0) $ let (x,y) = srcTop in rectC (x * 32 + 8) (y * 32 + 8) 16 48
