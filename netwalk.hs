@@ -98,6 +98,7 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
   Just canvas <- getCanvas canvasElem
   Just buf <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
   Just grid <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
+  Just soln <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
   liveEnd <- paint $ rectB (RGB 255 255 0) 9 9 14 14
   deadEnd <- paint $ rectB (RGB 191 191 191) 10 10 13 13
   packet  <- paint $ (color (RGB 0 0 0) $ fill $ circle (16, 16) 5) >>
@@ -123,8 +124,6 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
 
     loop (Game board state rs packets) = do
       render canvas $ draw buf (0, 0)
-      render buf $ draw grid (0, 0)
-
       let
         (pics1, done) = drawLive srcBot board M.empty
         pics2 = concat [drawDead (board!i) | i <- range bnds, i `M.notMember` done]
@@ -140,13 +139,19 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
           else concat $ map adv packets
         game1 = Game board (if null pics2 then Won else Play) rs packets1
         in do
-          renderOnTop buf $ sequence_ $ pics1 ++ pics2
-          renderOnTop buf $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
-          renderOnTop buf $ sequence_ [drawB packet (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
+          if state == Won then do
+            render buf $ draw soln (0, 0)
+            sequence_ [renderOnTop buf $ drawB packet (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
+          else do
+            render buf $ draw grid (0, 0)
+            renderOnTop buf $ sequence_ $ pics1 ++ pics2
+            renderOnTop buf $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
+            render soln $ draw buf (0, 0)
+
           q <- swapMVar evq []
           game2 <- return $ if null q then game1 else handle game1 (head q)
           setProp message "innerHTML" $ case state of
             Won -> "Solved"
             _ -> ""
-          setTimeout 10 $ loop game2
+          setTimeout 20 $ loop game2
     in loop $ initGame $ randomRs (0, 2^20 :: Int) seed
