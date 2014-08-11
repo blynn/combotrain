@@ -2,13 +2,14 @@ import Control.Concurrent.MVar
 import Control.Monad
 import Data.Ix
 import Data.Array
+import Data.List
 import qualified Data.Map as M
 import Haste
 import Haste.Graphics.Canvas
 
 bnds = ((0,0), (9,8))
-srcTop = (4, 4)
-srcBot = (4, 5)
+srcTop = (div x 2, div y 2) where (x, y) = snd bnds
+srcBot = (x, y + 1) where (x, y) = srcTop
 isSrc i = i == srcTop || i == srcBot
 
 data Tile = Tile { xy :: (Int, Int), ways :: [(Int, Int)] } | Blank deriving Eq
@@ -21,18 +22,16 @@ data Game = Game { board :: Array (Int, Int) Tile
 
 data State = Won | Play deriving Eq
 
-blankBoard = array bnds [(i, Blank) | i <- range bnds]
-dirs = [(1,0),(0,-1),(-1,0),(0,1)]
-
 gen :: [Tile] -> Array (Int, Int) Tile -> [Int] -> (Array (Int, Int) Tile, [Int])
-gen [] board rs = scramble board rs
+gen [] board (r:rs) = scramble (scrambleSrc board r) rs
 gen seeds board (r:r1:rs) = let
   n = r `mod` length seeds
-  (as, b@(Tile i@(x, y) ds):bs) = splitAt n seeds
-  exits = [((x+dx, y+dy), dj) | dj@(dx,dy) <- dirs, let j = (x+dx, y+dy) in inRange bnds j && (board!j) == Blank && (i /= srcTop || dx == 0)]
+  (as, b@(Tile i@(x, y) w):bs) = splitAt n seeds
+  exits = [((x+dx, y+dy), dj) | dj@(dx,dy) <- [(1,0),(0,-1),(-1,0),(0,1)],
+   let j = (x+dx, y+dy) in inRange bnds j && (board!j) == Blank && (i /= srcTop || dx == 0)]
   in if null exits then gen (as ++ bs) board (r1:rs) else let
     (j, dj@(dx,dy)) = exits!!(r1 `mod` length exits)
-    augTile = Tile i (dj:ds)
+    augTile = Tile i (dj:w)
     newTile = Tile j [(-dx, -dy)]
     in gen ((augTile:newTile:as) ++ bs) (board // [(i, augTile), (j, newTile)]) rs
 
@@ -41,14 +40,21 @@ scramble board rs =
             | otherwise =  (i, iterate rot (board!i) !! (r `mod` 4))
   in (array bnds $ zipWith f (range bnds) rs, drop (rangeSize bnds) rs)
 
-initGame rs = let (board, rs1) = gen [tileTop, tileBot] (blankBoard // [(srcTop, tileTop), (srcBot, tileBot)]) rs in Game board Play rs1 []
+scrambleSrc board r = iterate srcRot board !! (r `mod` 4)
 
-tileTop = Tile srcTop [(0, 1)]
-tileBot = Tile srcBot [(0, -1)]
+initGame rs = let
+  top = Tile srcTop [(0, 1)]
+  bot = Tile srcBot [(0, -1)]
+  (board, rs1) = gen [top, bot] (array bnds [(i, Blank) | i <- range bnds] // [(srcTop, top), (srcBot, bot)]) rs in Game board Play rs1 []
 
 data Event = KeyDown Int | Click Int Int
 
-rot (Tile i ds) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) ds
+rot (Tile i w) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) w
+
+srcRot board = let
+  Tile _ w = rot $ Tile (0, 0) $ delete (0, -1) (ways $ board!srcBot) ++ filter (== (0, -1)) (ways $ board!srcTop)
+  in board // [(srcTop, Tile srcTop $ (0, 1) : filter (== (0, -1)) w),
+               (srcBot, Tile srcBot $ (0, -1) : filter (/= (0, -1)) w)]
 
 newPackets board i = [(i, dj, 0) | dj <- (ways (board!i))]
 
@@ -56,7 +62,8 @@ handle game@(Game board state _ packets) (Click mx my) = let
   i = (mx `div` 32, my `div` 32)
   in if inRange bnds i then
     if state == Play then
-      if isSrc i then game else game { board = board // [(i, rot $ board!i)] }
+      if isSrc i then game { board = srcRot board }
+      else game { board = board // [(i, rot $ board!i)] }
     else
       game { packets = packets ++ newPackets board i }
   else game
@@ -90,17 +97,17 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
   seed <- newSeed
   let
     drawDead Blank = []
-    drawDead (Tile (x,y) ds) = let (ox,oy) = (x*32, y*32) in [ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds ] ++ if length ds == 1 then [rectB (RGB 191 191 191) (ox+10) (oy+10) 13 13] else []
+    drawDead (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in [ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w ] ++ if length w == 1 then [rectB (RGB 191 191 191) (ox+10) (oy+10) 13 13] else []
 
     drawLive i@(x,y) board done = let
       (ox, oy) = (x*32, y*32)
-      Tile _ ds = board!i
+      Tile _ w = board!i
       in foldl (
         \(pics, done) (x, y) -> let (pics1, done1) = drawLive (x, y) board done in (pics ++ pics1, done1)
       ) (
-        [color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds]
-        ++ if length ds == 1 then [rectB (RGB 255 255 0) (ox+9) (oy+9) 14 14] else [], M.insert (x, y) True done
-      ) [(x + dx, y + dy) | (dx,dy) <- ds, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
+        [color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
+        ++ if length w == 1 then [rectB (RGB 255 255 0) (ox+9) (oy+9) 14 14] else [], M.insert (x, y) True done
+      ) [(x + dx, y + dy) | (dx,dy) <- w, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
 
     loop (Game board state rs packets) = do
       render canvas $ color (RGB 192 192 192) $ sequence_
