@@ -7,7 +7,7 @@ import qualified Data.Map as M
 import Haste
 import Haste.Graphics.Canvas
 
-bnds = ((0,0), (9,8))
+bnds = ((0,0), (5,5))
 srcTop = (div x 2, div y 2) where (x, y) = snd bnds
 srcBot = (x, y + 1) where (x, y) = srcTop
 isSrc i = i == srcTop || i == srcBot
@@ -94,10 +94,20 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
     q <- takeMVar evq
     putMVar evq (q ++ [KeyDown _k])
   Just canvas <- getCanvas canvasElem
+  Just buf <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
+  Just grid <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
+  Just liveEnd <- createCanvas 32 32
+  render liveEnd $ rectB (RGB 255 255 0) 9 9 14 14
+  Just deadEnd <- createCanvas 32 32
+  render deadEnd $ rectB (RGB 191 191 191) 10 10 13 13
+
+  render grid $ color (RGB 192 192 192) $ sequence_
+    $ [ stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
+    ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
   seed <- newSeed
   let
     drawDead Blank = []
-    drawDead (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in [ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w ] ++ if length w == 1 then [rectB (RGB 191 191 191) (ox+10) (oy+10) 13 13] else []
+    drawDead (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in [color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w] ++ if length w == 1 then [draw deadEnd (fromIntegral ox, fromIntegral oy)] else []
 
     drawLive i@(x,y) board done = let
       (ox, oy) = (x*32, y*32)
@@ -106,13 +116,12 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
         \(pics, done) (x, y) -> let (pics1, done1) = drawLive (x, y) board done in (pics ++ pics1, done1)
       ) (
         [color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
-        ++ if length w == 1 then [rectB (RGB 255 255 0) (ox+9) (oy+9) 14 14] else [], M.insert (x, y) True done
+        ++ if length w == 1 then [draw liveEnd (fromIntegral ox, fromIntegral oy)] else [], M.insert (x, y) True done
       ) [(x + dx, y + dy) | (dx,dy) <- w, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
 
     loop (Game board state rs packets) = do
-      render canvas $ color (RGB 192 192 192) $ sequence_
-        $ [ stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
-        ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
+      render canvas $ draw buf (0, 0)
+      render buf $ draw grid (0, 0)
 
       let
         (pics1, done) = drawLive srcBot board M.empty
@@ -129,12 +138,12 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
           else concat $ map adv packets
         game1 = Game board (if null pics2 then Won else Play) rs packets1
         in do
-          renderOnTop canvas $ sequence_ $ pics1 ++ pics2
-          renderOnTop canvas $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
-          renderOnTop canvas $ sequence_ [circleB (32*x + 16 + 2*t*dx) (32*y + 16 + 2*t*dy) 5 | ((x,y), (dx,dy), t) <- packets]
+          renderOnTop buf $ sequence_ $ pics1 ++ pics2
+          renderOnTop buf $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
+          renderOnTop buf $ sequence_ [circleB (32*x + 16 + 2*t*dx) (32*y + 16 + 2*t*dy) 5 | ((x,y), (dx,dy), t) <- packets]
           q <- swapMVar evq []
           setProp message "innerHTML" $ case state of
             Won -> "Solved"
             _ -> ""
-          setTimeout 32 $ loop ( if null q then game1 else handle game1 (head q) )
+          setTimeout 20 $ loop ( if null q then game1 else handle game1 (head q) )
     in loop $ initGame $ randomRs (0, 2^20 :: Int) seed
