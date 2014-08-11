@@ -13,8 +13,11 @@ isSrc i = i == srcTop || i == srcBot
 
 data Tile = Tile { xy :: (Int, Int), ways :: [(Int, Int)] } | Blank deriving Eq
 
-data Game = Game { board :: Array (Int, Int) Tile, state :: State
-                 , rands :: [Int] }
+data Game = Game { board :: Array (Int, Int) Tile
+                 , state :: State
+                 , rands :: [Int]
+                 , packets :: [((Int, Int), (Int, Int), Int)]
+                 }
 
 data State = Won | Play deriving Eq
 
@@ -38,19 +41,24 @@ scramble board rs =
             | otherwise =  (i, iterate rot (board!i) !! (r `mod` 4))
   in (array bnds $ zipWith f (range bnds) rs, drop (rangeSize bnds) rs)
 
-initGame rs = let (board, rs1) = gen [tileTop, tileBot] (blankBoard // [(srcTop, tileTop), (srcBot, tileBot)]) rs in Game board Play rs1
+initGame rs = let (board, rs1) = gen [tileTop, tileBot] (blankBoard // [(srcTop, tileTop), (srcBot, tileBot)]) rs in Game board Play rs1 []
 
-tileTop = Tile srcTop []
-tileBot = Tile srcBot []
+tileTop = Tile srcTop [(0, 1)]
+tileBot = Tile srcBot [(0, -1)]
 
 data Event = KeyDown Int | Click Int Int
 
 rot (Tile i ds) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) ds
 
-handle game@(Game board _ _) (Click mx my) = let
+newPackets board i = [(i, dj, 0) | dj <- (ways (board!i))]
+
+handle game@(Game board state _ packets) (Click mx my) = let
   i = (mx `div` 32, my `div` 32)
-  in if state game == Play && inRange bnds i then
-    if isSrc i then game else game { board = board // [(i, rot $ board!i)] }
+  in if inRange bnds i then
+    if state == Play then
+      if isSrc i then game else game { board = board // [(i, rot $ board!i)] }
+    else
+      game { packets = packets ++ newPackets board i }
   else game
 
 handle game (KeyDown 113) = initGame (rands game)
@@ -63,6 +71,11 @@ rectB :: Color -> Int -> Int -> Int -> Int -> Picture ()
 rectB c x y dx dy = do
   color c $ fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + dx), fromIntegral (y + dy))
   color (RGB 0 0 0) $ stroke $ rect (fromIntegral x - 0.5, fromIntegral y - 0.5) (fromIntegral (x + dx) + 0.5, fromIntegral (y + dy) + 0.5)
+
+circleB :: Int -> Int -> Int -> Picture ()
+circleB x y r = do
+  color (RGB 0 0 0) $ fill $ circle (fromIntegral x, fromIntegral y) (fromIntegral r)
+  color (RGB 255 255 255) $ fill $ circle (fromIntegral x, fromIntegral y) (fromIntegral r - 1)
 
 main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] -> do
   evq <- newEmptyMVar
@@ -89,19 +102,29 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
         ++ if length ds == 1 then [rectB (RGB 255 255 0) (ox+9) (oy+9) 14 14] else [], M.insert (x, y) True done
       ) [(x + dx, y + dy) | (dx,dy) <- ds, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
 
-    loop (Game board state rs) = do
+    loop (Game board state rs packets) = do
       render canvas $ color (RGB 192 192 192) $ sequence_
         $ [ stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
         ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
 
       let
-        (pics, done) = drawLive srcTop board M.empty
-        (pics1, done1) = drawLive srcBot board done
-        pics2 = concat [drawDead (board!i) | i <- range bnds, i `M.notMember` done1]
-        game1 = Game board ( if null pics2 then Won else Play ) rs
+        (pics1, done) = drawLive srcBot board M.empty
+        pics2 = concat [drawDead (board!i) | i <- range bnds, i `M.notMember` done]
+        adv packet@((x, y), (dx, dy), t) =
+          if t == 16 - 1 then
+            let (x1, y1) = (x + dx, y + dy) in
+            [((x1, y1), dj, 0) | dj <- ways $ board!(x1, y1), dj /= (-dx, -dy)]
+          else
+            [((x, y), (dx, dy), t + 1)]
+
+        packets1 =
+          if state == Won && null packets then newPackets board srcBot
+          else concat $ map adv packets
+        game1 = Game board (if null pics2 then Won else Play) rs packets1
         in do
-          renderOnTop canvas $ sequence_ $ pics ++ pics1 ++ pics2
+          renderOnTop canvas $ sequence_ $ pics1 ++ pics2
           renderOnTop canvas $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
+          renderOnTop canvas $ sequence_ [circleB (32*x + 16 + 2*t*dx) (32*y + 16 + 2*t*dy) 5 | ((x,y), (dx,dy), t) <- packets]
           q <- swapMVar evq []
           setProp message "innerHTML" $ case state of
             Won -> "Solved"
