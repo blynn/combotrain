@@ -96,7 +96,6 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
     q <- takeMVar evq
     putMVar evq (q ++ [KeyDown _k])
   Just canvas <- getCanvas canvasElem
-  Just buf <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
   Just grid <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
   Just soln <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
   liveEnd <- paint $ rectB (RGB 255 255 0) 9 9 14 14
@@ -111,8 +110,8 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
   let
     drawDead Blank = return ()
     drawDead (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in do
-      sequence_ [renderOnTop buf $ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
-      when (length w == 1) $ renderOnTop buf $ drawB deadEnd (ox, oy)
+      sequence_ [renderOnTop canvas $ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
+      when (length w == 1) $ renderOnTop canvas $ drawB deadEnd (ox, oy)
 
     drawLive [] _ done = return done
     drawLive (i@(x,y):is) board done = let
@@ -120,14 +119,16 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
       Tile _ w = board!i
       next = [(x + dx, y + dy) | (dx,dy) <- w, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
       in do
-        sequence_ [renderOnTop buf $ color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
-        when (length w == 1) $ renderOnTop buf $ drawB liveEnd (ox, oy)
+        sequence_ [renderOnTop canvas $ color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
+        when (length w == 1) $ renderOnTop canvas $ drawB liveEnd (ox, oy)
         done2 <- drawLive (next ++ is) board (M.insert i True done)
         return done2
 
-    loop (Game board state rs packets) = do
-      render canvas $ draw buf (0, 0)
+    loop game = do
+      q <- swapMVar evq []
       let
+        Game board _ rs packets = if null q then game else handle game (head q)
+
         adv packet@((x, y), (dx, dy), t) =
           if t == 16 - 1 then
             let (x1, y1) = (x + dx, y + dy) in
@@ -135,25 +136,21 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
           else
             [((x, y), (dx, dy), t + 1)]
 
-        packets1 = if state == Won && null packets then newPackets board srcBot
-                   else concat $ map adv packets
         in do
-          q <- swapMVar evq []
-          isWon <- if state == Won then do
-            render buf $ draw soln (0, 0)
-            sequence_ [renderOnTop buf $ drawB packet (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
-            return True
+          game2 <- if (state game) == Won then do
+            render canvas $ draw soln (0, 0)
+            sequence_ [renderOnTop canvas $ drawB packet (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
+            setProp message "innerHTML" "Solved"
+            return $ Game board Won rs (if null packets then
+              newPackets board srcBot else concat $ map adv packets)
           else do
-            render buf $ draw grid (0, 0)
+            render canvas $ draw grid (0, 0)
             done <- drawLive [srcBot] board M.empty
             isNull <- null `liftM` sequence [drawDead (board!i) | i <- range bnds, i `M.notMember` done]
-            renderOnTop buf $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
-            render soln $ draw buf (0, 0)
-            return isNull
+            renderOnTop canvas $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
+            render soln $ draw canvas (0, 0)
+            setProp message "innerHTML" ""
+            return $ Game board (if isNull then Won else Play) rs packets
 
-          game2 <- let game1 = Game board (if isWon then Won else Play) rs packets1 in return $ if null q then game1 else handle game1 (head q)
-          setProp message "innerHTML" $ case state of
-            Won -> "Solved"
-            _ -> ""
           setTimeout 20 $ loop game2
     in loop $ initGame $ randomRs (0, 2^20 :: Int) seed
