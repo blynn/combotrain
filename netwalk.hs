@@ -109,24 +109,25 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
     ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
   seed <- newSeed
   let
-    drawDead Blank = []
-    drawDead (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in [color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w] ++ if length w == 1 then [drawB deadEnd (ox, oy)] else []
+    drawDead Blank = return ()
+    drawDead (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in do
+      sequence_ [renderOnTop buf $ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
+      when (length w == 1) $ renderOnTop buf $ drawB deadEnd (ox, oy)
 
-    drawLive i@(x,y) board done = let
+    drawLive [] _ done = return done
+    drawLive (i@(x,y):is) board done = let
       (ox, oy) = (x*32, y*32)
       Tile _ w = board!i
-      in foldl (
-        \(pics, done) (x, y) -> let (pics1, done1) = drawLive (x, y) board done in (pics ++ pics1, done1)
-      ) (
-        [color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
-        ++ if length w == 1 then [drawB liveEnd (ox, oy)] else [], M.insert (x, y) True done
-      ) [(x + dx, y + dy) | (dx,dy) <- w, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
+      next = [(x + dx, y + dy) | (dx,dy) <- w, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
+      in do
+        sequence_ [renderOnTop buf $ color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
+        when (length w == 1) $ renderOnTop buf $ drawB liveEnd (ox, oy)
+        done2 <- drawLive (next ++ is) board (M.insert i True done)
+        return done2
 
     loop (Game board state rs packets) = do
       render canvas $ draw buf (0, 0)
       let
-        (pics1, done) = drawLive srcBot board M.empty
-        pics2 = concat [drawDead (board!i) | i <- range bnds, i `M.notMember` done]
         adv packet@((x, y), (dx, dy), t) =
           if t == 16 - 1 then
             let (x1, y1) = (x + dx, y + dy) in
@@ -134,22 +135,23 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
           else
             [((x, y), (dx, dy), t + 1)]
 
-        packets1 =
-          if state == Won && null packets then newPackets board srcBot
-          else concat $ map adv packets
-        game1 = Game board (if null pics2 then Won else Play) rs packets1
+        packets1 = if state == Won && null packets then newPackets board srcBot
+                   else concat $ map adv packets
         in do
-          if state == Won then do
+          q <- swapMVar evq []
+          isWon <- if state == Won then do
             render buf $ draw soln (0, 0)
             sequence_ [renderOnTop buf $ drawB packet (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
+            return True
           else do
             render buf $ draw grid (0, 0)
-            renderOnTop buf $ sequence_ $ pics1 ++ pics2
+            done <- drawLive [srcBot] board M.empty
+            isNull <- null `liftM` sequence [drawDead (board!i) | i <- range bnds, i `M.notMember` done]
             renderOnTop buf $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
             render soln $ draw buf (0, 0)
+            return isNull
 
-          q <- swapMVar evq []
-          game2 <- return $ if null q then game1 else handle game1 (head q)
+          game2 <- let game1 = Game board (if isWon then Won else Play) rs packets1 in return $ if null q then game1 else handle game1 (head q)
           setProp message "innerHTML" $ case state of
             Won -> "Solved"
             _ -> ""
