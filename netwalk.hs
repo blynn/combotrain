@@ -11,12 +11,17 @@ srcTop = (4, 4)
 srcBot = (4, 5)
 isSrc i = i == srcTop || i == srcBot
 
-data Tile = Tile { xy :: (Int, Int), ways :: [(Int, Int)] } | Blank deriving (Show, Eq)
+data Tile = Tile { xy :: (Int, Int), ways :: [(Int, Int)] } | Blank deriving Eq
+
+data Game = Game { board :: Array (Int, Int) Tile, state :: State
+                 , rands :: [Int] }
+
+data State = Won | Play deriving Eq
 
 blankBoard = array bnds [(i, Blank) | i <- range bnds]
 dirs = [(1,0),(0,-1),(-1,0),(0,1)]
 
-gen :: [Tile] -> Array (Int, Int) Tile -> [Int] -> Array (Int, Int) Tile
+gen :: [Tile] -> Array (Int, Int) Tile -> [Int] -> (Array (Int, Int) Tile, [Int])
 gen [] board rs = scramble board rs
 gen seeds board (r:r1:rs) = let
   n = r `mod` length seeds
@@ -31,7 +36,9 @@ gen seeds board (r:r1:rs) = let
 scramble board rs =
   let f i r | isSrc i   = (i, board!i)
             | otherwise =  (i, iterate rot (board!i) !! (r `mod` 4))
-  in array bnds $ zipWith f (range bnds) rs
+  in (array bnds $ zipWith f (range bnds) rs, drop (rangeSize bnds) rs)
+
+initGame rs = let (board, rs1) = gen [tileTop, tileBot] (blankBoard // [(srcTop, tileTop), (srcBot, tileBot)]) rs in Game board Play rs1
 
 tileTop = Tile srcTop []
 tileBot = Tile srcBot []
@@ -40,19 +47,22 @@ data Event = KeyDown Int | Click Int Int
 
 rot (Tile i ds) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) ds
 
-handle board (Click mx my) = let
+handle game@(Game board _ _) (Click mx my) = let
   i = (mx `div` 32, my `div` 32)
-  in if isSrc i then board else board // [(i, rot $ board!i)]
-handle board _ = board
+  in if state game == Play && inRange bnds i then
+    if isSrc i then game else game { board = board // [(i, rot $ board!i)] }
+  else game
+
+handle game (KeyDown 113) = initGame (rands game)
+handle game _ = game
 
 lineB :: Int -> Int -> Int -> Int -> Shape ()
 lineB x y dx dy = line (0.5 + fromIntegral x, 0.5 + fromIntegral y) (0.5 + fromIntegral (x + dx), 0.5 + fromIntegral (y + dy))
 
-rectB :: Int -> Int -> Int -> Int -> Picture ()
-rectB x y dx dy = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + dx), fromIntegral (y + dy))
-
-rectC :: Int -> Int -> Int -> Int -> Picture ()
-rectC x y dx dy = stroke $ rect (fromIntegral x - 0.5, fromIntegral y - 0.5) (fromIntegral (x + dx) + 0.5, fromIntegral (y + dy) + 0.5)
+rectB :: Color -> Int -> Int -> Int -> Int -> Picture ()
+rectB c x y dx dy = do
+  color c $ fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + dx), fromIntegral (y + dy))
+  color (RGB 0 0 0) $ stroke $ rect (fromIntegral x - 0.5, fromIntegral y - 0.5) (fromIntegral (x + dx) + 0.5, fromIntegral (y + dy) + 0.5)
 
 main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] -> do
   evq <- newEmptyMVar
@@ -66,18 +76,20 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
   Just canvas <- getCanvas canvasElem
   seed <- newSeed
   let
-    initBoard = gen [tileTop, tileBot] (blankBoard // [(srcTop, tileTop), (srcBot, tileBot)]) $ randomRs (0, 2^20 :: Int) seed
     drawDead Blank = []
-    drawDead (Tile (x,y) ds) = let (ox,oy) = (x*32, y*32) in [ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds ] ++ if length ds == 1 then [color (RGB 191 191 191) $ rectB (ox+10) (oy+10) 13 13] else []
+    drawDead (Tile (x,y) ds) = let (ox,oy) = (x*32, y*32) in [ color (RGB 255 127 127) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds ] ++ if length ds == 1 then [rectB (RGB 191 191 191) (ox+10) (oy+10) 13 13] else []
 
     drawLive i@(x,y) board done = let
       (ox, oy) = (x*32, y*32)
       Tile _ ds = board!i
       in foldl (
         \(pics, done) (x, y) -> let (pics1, done1) = drawLive (x, y) board done in (pics ++ pics1, done1)
-      ) ([color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds] ++ if length ds == 1 then [color (RGB 255 255 0) $ rectB (ox+9) (oy+9) 14 14, color (RGB 0 0 0) $ rectC (ox+9) (oy+9) 14 14] else [], M.insert (x, y) True done) [(x + dx, y + dy) | (dx,dy) <- ds, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
+      ) (
+        [color (RGB 0 191 0) $ stroke $ lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- ds]
+        ++ if length ds == 1 then [rectB (RGB 255 255 0) (ox+9) (oy+9) 14 14] else [], M.insert (x, y) True done
+      ) [(x + dx, y + dy) | (dx,dy) <- ds, inRange bnds (x + dx, y + dy), (-dx, -dy) `elem` (ways (board!(x+dx, y+dy))), (x+dx, y+dy) `M.notMember` done]
 
-    loop board = do
+    loop (Game board state rs) = do
       render canvas $ color (RGB 192 192 192) $ sequence_
         $ [ stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
         ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
@@ -86,14 +98,13 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
         (pics, done) = drawLive srcTop board M.empty
         (pics1, done1) = drawLive srcBot board done
         pics2 = concat [drawDead (board!i) | i <- range bnds, i `M.notMember` done1]
-        isWon = null pics2
+        game1 = Game board ( if null pics2 then Won else Play ) rs
         in do
-          renderOnTop canvas $ sequence_ $ pics ++ pics1
-          renderOnTop canvas $ sequence_ pics2
-          renderOnTop canvas $ let (x,y) = srcTop in do
-            color (RGB 0 0 255) $ rectB (x * 32 + 9) (y * 32 + 9) 16 48
-            color (RGB 0 0 0) $ rectC (x * 32 + 9) (y * 32 + 9) 16 48
+          renderOnTop canvas $ sequence_ $ pics ++ pics1 ++ pics2
+          renderOnTop canvas $ let (x,y) = srcTop in rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
           q <- swapMVar evq []
-          when isWon $ setProp message "innerHTML" "Well done!"
-          setTimeout 32 $ loop ( if null q then board else handle board (head q) )
-    in loop initBoard
+          setProp message "innerHTML" $ case state of
+            Won -> "Solved"
+            _ -> ""
+          setTimeout 32 $ loop ( if null q then game1 else handle game1 (head q) )
+    in loop $ initGame $ randomRs (0, 2^20 :: Int) seed
