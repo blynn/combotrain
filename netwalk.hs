@@ -22,12 +22,12 @@ data Game = Game { board   :: Array (Int, Int) Tile
 
 data State = Won | Play deriving Eq
 
-gen :: [Tile] -> Array (Int, Int) Tile -> [Int] -> (Array (Int, Int) Tile, [Int])
 gen [] board (r:rs) = scramble (scrambleSrc board r) rs
 gen seeds board (r:r1:rs) = let
   (as, b@(Tile i@(x, y) w):bs) = splitAt (mod r $ length seeds) seeds
-  exits = [((x+dx, y+dy), dj) | dj@(dx,dy) <- [(1,0),(0,-1),(-1,0),(0,1)], let
-    j = (x+dx, y+dy) in inRange bnds j && (board!j) == Blank && (i /= srcTop || dx == 0)]
+  exits = [(j, dj) | dj@(dx,dy) <- [(1,0),(0,-1),(-1,0),(0,1)],
+    let j = (x+dx, y+dy), inRange bnds j, (board!j) == Blank,
+    (i /= srcTop || dx == 0)]
   in if null exits then gen (as ++ bs) board (r1:rs) else let
     (j, dj@(dx,dy)) = exits!!(r1 `mod` length exits)
     augT = Tile i (dj:w)
@@ -45,7 +45,8 @@ followLive game = let
   board = Main.board game
   f [] live n = (live, n)
   f (i@(x, y):is) live n = if (live!i) then f is live n else let
-    js = [(x + dx, y + dy) | (dx,dy) <- ways (board!i), let j = (x+dx, y+dy) in inRange bnds j && ((-dx, -dy) `elem` ways (board!j)) && not (live!j)]
+    js = [j | (dx,dy) <- ways (board!i), let j = (x+dx, y+dy), inRange bnds j,
+          ((-dx, -dy) `elem` ways (board!j)), not (live!j)]
     in f (is ++ js) (live // [(i, True)]) (n + 1)
   (live, n) = f [srcBot] (listArray bnds $ repeat False) 0
   in game { live = live, state = if n == rangeSize bnds then Won else Play }
@@ -83,7 +84,6 @@ handle game _ = (game, False)
 lineB :: Int -> Int -> Int -> Int -> Shape ()
 lineB x y dx dy = line (0.5 + fromIntegral x, 0.5 + fromIntegral y) (0.5 + fromIntegral (x + dx), 0.5 + fromIntegral (y + dy))
 
-rectB :: Color -> Int -> Int -> Int -> Int -> Picture ()
 rectB c x y dx dy = do
   color c $ fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + dx), fromIntegral (y + dy))
   color (RGB 0 0 0) $ stroke $ rect (fromIntegral x - 0.5, fromIntegral y - 0.5) (fromIntegral (x + dx) + 0.5, fromIntegral (y + dy) + 0.5)
