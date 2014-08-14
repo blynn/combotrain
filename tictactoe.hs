@@ -58,9 +58,10 @@ minimize (Node leaf []) = score leaf
 minimize (Node _ kids) = minimum (map maximize kids)
 
 best (x:xs) = let
+  sc x = minimize $ gameTree x
   f [] n bestYet = bestYet
-  f (x:xs) n bestYet = let n' = minimize ( gameTree x ) in if n' > n then f xs n' x else f xs n bestYet
-  in f xs (minimize $ gameTree x) x
+  f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
+  in f xs (sc x) x
 
 handle game@(Game board status player) (MouseDown x y) = let
   j = (x `div` sz, y `div` sz)

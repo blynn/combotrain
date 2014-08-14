@@ -1,8 +1,9 @@
 import Control.Monad
 import Data.Array
 import Data.Maybe
+import Data.Tree
 import Haste
-import qualified Haste.Concurrent as HC
+import qualified Haste.Concurrent as H
 import Haste.Graphics.Canvas
 
 bnds = ((0,0), (7,7)); sz = 40
@@ -22,6 +23,31 @@ initBoard = let
   in array bnds [(i, initRow y) | i@(x,y) <- range bnds]
 
 initGame = Game initBoard Play 1 Nothing
+
+score (Game _ Won player _) = -player
+score _ = 0
+
+maximize (Node leaf []) = score leaf
+maximize (Node _ kids) = maximum (map minimize kids)
+
+minimize (Node leaf []) = score leaf
+minimize (Node _ kids) = minimum (map maximize kids)
+
+gameTree = unfoldTree nextStates 
+
+nextMoves game@(Game board Play player _) = [move game i dst | i <- range bnds, board!i == player, dst <- movesFrom i game]
+nextMoves game@(Game _ Won _ _) = []
+
+nextStates game = (game, [g | g <- nextMoves game])
+
+prune 0 (Node a _) = Node a []
+prune n (Node a kids) = Node a $ map (prune (n - 1)) kids
+
+best (x:xs) = let
+  sc x = minimize $ prune 2 $ gameTree x
+  f [] n bestYet = bestYet
+  f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
+  in f xs (sc x) x
 
 box :: Int -> Int -> Int -> Int -> Picture ()  -- Why is this needed?
 box x y dx dy = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x+dx), fromIntegral (y+dy))
@@ -64,11 +90,27 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
   Just buf <- createCanvas 320 320
   Just selMask <- createCanvas 320 320
 
-  ev <- HC.newEmptyMVar
-  canvasE  `onEvent` OnMouseDown $ \_button (x, y) -> HC.concurrent $ HC.putMVar ev $ Click x y
-  body `onEvent` OnKeyDown $ \k -> HC.concurrent $ HC.putMVar ev $ KeyDown k
+  ev <- H.newEmptyMVar
+  canvasE  `onEvent` OnMouseDown $ \_button (x, y) -> H.concurrent $ H.putMVar ev $ Click x y
+  body `onEvent` OnKeyDown $ \k -> H.concurrent $ H.putMVar ev $ KeyDown k
+
+  seed <- newSeed
+  seedV <- H.newMVar seed
 
   let
+    randomRIO range = do
+      seed <- H.takeMVar seedV
+      let (r, seed1) = randomR range seed in do
+        H.putMVar seedV seed1
+        return r
+
+    shuffleIO [] = return []
+    shuffleIO xs = do
+      n <- randomRIO (0, length xs - 1)
+      let (a, b:bs) = splitAt n xs in do 
+        ys <- shuffleIO (a ++ bs)
+        return (b:ys)
+
     drawGame game@(Game board state player _) = do
       sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderOnTop buf $ draw (if p == 1 then whitePiece else blackPiece) (fromIntegral (x*sz), fromIntegral (y*sz)) | i@(x, y) <- range bnds, let p = board!i, p /= 0]
       render canvas $ draw buf (0, 0)
@@ -77,9 +119,9 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
         Won -> " wins"
 
     loop game@(Game board _ player sel0) = do
-      e <- HC.takeMVar ev
+      e <- H.takeMVar ev
       case e of
-        Click bx by -> let
+        Click bx by -> when (state game == Play) $ let
           i@(x, y) = (div bx sz, div by sz)
           sel = if board!i == player then Just i else Nothing
           in when (inRange bnds i) $ do
@@ -94,12 +136,19 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
 
               renderOnTop canvas $ draw selMask (0, 0)
               loop $ game { selection = sel }
-            else let
-              ms = movesFrom (fromJust sel0) game
-              in if (i `elem` ms) then
+            else
+              if i `elem` movesFrom (fromJust sel0) game then
                 let game1 = move game (fromJust sel0) i in do
                   drawGame game1
-                  loop game1
+                  -- Delay so canvas has a chance to update.
+                  if state game1 == Play then
+                    setTimeout 20 $ H.concurrent $ do
+                    ms <- shuffleIO $ nextMoves game1
+                    let game2 = best ms in do
+                      drawGame game2
+                      loop game2
+                  else
+                    loop game1
               else
                 loop game { selection = Nothing }
 
@@ -111,4 +160,4 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
 
     game = initGame in do
       drawGame game
-      HC.concurrent $ HC.fork $ loop game
+      H.concurrent $ H.forkIO $ loop game
