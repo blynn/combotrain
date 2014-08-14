@@ -73,8 +73,7 @@ handle game (KeyDown sym) = case sym of
 main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] -> do
   xo <- loadBitmap "xo.png"
   Just canvas <- getCanvas canvasElem
-  evq <- newEmptyMVar
-  putMVar evq []
+  evq <- newMVar []
   canvasElem  `onEvent` OnMouseDown $ \_button (x, y) -> do
     q <- takeMVar evq
     putMVar evq (q ++ [MouseDown x y])
