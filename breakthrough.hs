@@ -27,11 +27,31 @@ initGame = Game initBoard Play 1 Nothing
 score (Game _ Won player _) = -player
 score _ = 0
 
-maximize (Node leaf []) = score leaf
-maximize (Node _ kids) = maximum (map minimize kids)
+maximize' :: Tree Int -> [Int]
+maximize' (Node leaf []) = [leaf]
+maximize' (Node _ kids) = let
+  mapmin (ns:nss) = (minimum ns : omit (minimum ns) nss)
+  omit pot [] = []
+  omit pot (ns:nss) | minleq ns pot = omit pot nss
+                    | otherwise     = (minimum ns : omit (minimum ns) nss)
+  minleq [] pot = False
+  minleq (n:ns) pot | n <= pot = True
+                    | True     = minleq ns pot
+  in mapmin (map minimize' kids)
+maximize = maximum . maximize'
 
-minimize (Node leaf []) = score leaf
-minimize (Node _ kids) = minimum (map maximize kids)
+minimize' :: Tree Int -> [Int]
+minimize' (Node leaf []) = [leaf]
+minimize' (Node _ kids) = let
+  mapmax (ns:nss) = (maximum ns : omit (maximum ns) nss)
+  omit pot [] = []
+  omit pot (ns:nss) | maxgeq ns pot = omit pot nss
+                    | otherwise     = (maximum ns : omit (maximum ns) nss)
+  maxgeq [] pot = False
+  maxgeq (n:ns) pot | n >= pot = True
+                    | True     = maxgeq ns pot
+  in mapmax (map maximize' kids)
+minimize = minimum . minimize'
 
 gameTree = unfoldTree nextStates 
 
@@ -44,7 +64,7 @@ prune 0 (Node a _) = Node a []
 prune n (Node a kids) = Node a $ map (prune (n - 1)) kids
 
 best (x:xs) = let
-  sc x = minimize $ prune 2 $ gameTree x
+  sc x = minimize $ fmap score $ prune 4 $ gameTree x
   f [] n bestYet = bestYet
   f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
   in f xs (sc x) x
