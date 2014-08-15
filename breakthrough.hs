@@ -24,8 +24,8 @@ initBoard = let
 
 initGame = Game initBoard Play 1 Nothing
 
-score (Game _ Won player _) = -player
-score _ = 0
+score (Game _ Won player _) = -player * 1024
+score (Game board Play _ _) = -1 * sum [board!i | i <- range bnds]
 
 maximize' :: Tree Int -> [Int]
 maximize' (Node leaf []) = [leaf]
@@ -64,7 +64,7 @@ prune 0 (Node a _) = Node a []
 prune n (Node a kids) = Node a $ map (prune (n - 1)) kids
 
 best (x:xs) = let
-  sc x = minimize $ fmap score $ prune 4 $ gameTree x
+  sc x = minimize $ fmap score $ prune 3 $ gameTree x
   f [] n bestYet = bestYet
   f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
   in f xs (sc x) x
