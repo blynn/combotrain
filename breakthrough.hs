@@ -9,7 +9,7 @@ import Haste.Graphics.Canvas
 bnds = ((0,0), (7,7)); sz = 40
 
 data Event = KeyDown Int | Click Int Int
-data State = Won | Play deriving Eq
+data State = Won | Play | Anim Int (Int, Int) (Int, Int) deriving Eq
 data Game = Game { board :: Array (Int, Int) Int
                  , state :: State
                  , player :: Int
@@ -53,18 +53,20 @@ minimize' (Node _ kids) = let
   in mapmax (map maximize' kids)
 minimize = minimum . minimize'
 
-gameTree = unfoldTree nextStates 
+gameTree = unfoldTree nextNodes 
 
-nextMoves game@(Game board Play player _) = [move game i dst | i <- range bnds, board!i == player, dst <- movesFrom i game]
-nextMoves game@(Game _ Won _ _) = []
+nextMoves game@(Game board Play player _) = [(i, dst) | i <- range bnds, board!i == player, dst <- movesFrom i game]
 
-nextStates game = (game, [g | g <- nextMoves game])
+nextGames game@(Game board Play player _) = [move game from to | (from, to) <- nextMoves game]
+nextGames game@(Game _ Won _ _) = []
+
+nextNodes game = (game, [g | g <- nextGames game])
 
 prune 0 (Node a _) = Node a []
 prune n (Node a kids) = Node a $ map (prune (n - 1)) kids
 
-best (x:xs) = let
-  sc x = minimize $ fmap score $ prune 3 $ gameTree x
+best game (x:xs) = let
+  sc (from, to) = minimize $ fmap score $ prune 3 $ gameTree $ move game from to
   f [] n bestYet = bestYet
   f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
   in f xs (sc x) x
@@ -118,6 +120,9 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
   seedV <- H.newMVar seed
 
   let
+    playerPiece   1  = whitePiece
+    playerPiece (-1) = blackPiece
+
     randomRIO range = do
       seed <- H.takeMVar seedV
       let (r, seed1) = randomR range seed in do
@@ -132,11 +137,28 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
         return (b:ys)
 
     drawGame game@(Game board state player _) = do
-      sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderOnTop buf $ draw (if p == 1 then whitePiece else blackPiece) (fromIntegral (x*sz), fromIntegral (y*sz)) | i@(x, y) <- range bnds, let p = board!i, p /= 0]
+      sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderOnTop buf $ draw (playerPiece p) (fromIntegral (x*sz), fromIntegral (y*sz)) | i@(x, y) <- range bnds, let p = board!i, p /= 0]
       render canvas $ draw buf (0, 0)
       setProp msg "innerHTML" $ playerName player ++ case state of
         Play -> " to move"
         Won -> " wins"
+        _ -> " is moving"
+
+    loop game@(Game board (Anim frame from@(x0, y0) to@(x1, y1)) _ _) = do
+      if frame == 8 then
+        let game1 = move game from to in do
+          drawGame game1
+          -- Delay so canvas has a chance to update.
+          if state game1 == Play && player game1 == -1 then
+            setTimeout 20 $ H.concurrent $ do
+            ms <- shuffleIO $ nextMoves game1
+            let (from, to) = best game1 ms in loop game1 { state = Anim 0 from to }
+          else
+            loop game1
+      else let f x0 x1 frame = fromIntegral $ x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
+        drawGame game { board = board // [(from, 0)] }
+        renderOnTop canvas $ draw (playerPiece (player game)) (f x0 x1 frame, f y0 y1 frame)
+        setTimeout 20 $ H.concurrent $ loop game { state = Anim (frame + 1) from to }
 
     loop game@(Game board _ player sel0) = do
       e <- H.takeMVar ev
@@ -158,17 +180,7 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
               loop $ game { selection = sel }
             else
               if i `elem` movesFrom (fromJust sel0) game then
-                let game1 = move game (fromJust sel0) i in do
-                  drawGame game1
-                  -- Delay so canvas has a chance to update.
-                  if state game1 == Play then
-                    setTimeout 20 $ H.concurrent $ do
-                    ms <- shuffleIO $ nextMoves game1
-                    let game2 = best ms in do
-                      drawGame game2
-                      loop game2
-                  else
-                    loop game1
+                loop game { state = Anim 0 (fromJust sel0) i }
               else
                 loop game { selection = Nothing }
 
