@@ -110,7 +110,6 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
   Just boardCan <- createCanvas 320 320
   sequence_ $ [renderOnTop boardCan $ color (sqColor (mod (x + y) 2 == 0)) $ box (x*sz) (y*sz) sz sz | (x, y) <- range bnds]
   Just buf <- createCanvas 320 320
-  Just selMask <- createCanvas 320 320
 
   ev <- H.newEmptyMVar
   canvasE  `onEvent` OnMouseDown $ \_button (x, y) -> H.concurrent $ H.putMVar ev $ Click x y
@@ -120,8 +119,7 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
   seedV <- H.newMVar seed
 
   let
-    playerPiece   1  = whitePiece
-    playerPiece (-1) = blackPiece
+    renderPiece c p (x,y) = renderOnTop c $ draw (if p == 1 then whitePiece else blackPiece) (fromIntegral x, fromIntegral y)
 
     randomRIO range = do
       seed <- H.takeMVar seedV
@@ -137,7 +135,7 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
         return (b:ys)
 
     drawGame game@(Game board state player _) = do
-      sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderOnTop buf $ draw (playerPiece p) (fromIntegral (x*sz), fromIntegral (y*sz)) | i@(x, y) <- range bnds, let p = board!i, p /= 0]
+      sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderPiece buf p (x*sz, y*sz) | i@(x, y) <- range bnds, let p = board!i, p /= 0]
       render canvas $ draw buf (0, 0)
       setProp msg "innerHTML" $ playerName player ++ case state of
         Play -> " to move"
@@ -155,9 +153,9 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
             let (from, to) = best game1 ms in loop game1 { state = Anim 0 from to }
           else
             loop game1
-      else let f x0 x1 frame = fromIntegral $ x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
+      else let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
         drawGame game { board = board // [(from, 0)] }
-        renderOnTop canvas $ draw (playerPiece (player game)) (f x0 x1 frame, f y0 y1 frame)
+        renderPiece canvas (player game) (f x0 x1 frame, f y0 y1 frame)
         setTimeout 20 $ H.concurrent $ loop game { state = Anim (frame + 1) from to }
 
     loop game@(Game board _ player sel0) = do
@@ -169,15 +167,11 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
           in when (inRange bnds i) $ do
             render canvas $ draw buf (0, 0)
             if sel0 == Nothing then do
-              case sel of
-                Nothing -> render selMask $ return ()
-                Just _ -> do
-                  render selMask $ drawB fromCan (x*sz) (y*sz)
-                  let y1 = y - player in sequence_ [renderOnTop selMask $
-                    drawB toCan (x1*sz) (y1*sz) | (x1, y1) <- movesFrom i game]
-
-              renderOnTop canvas $ draw selMask (0, 0)
-              loop $ game { selection = sel }
+              unless (sel == Nothing) $ do
+                renderOnTop canvas $ drawB fromCan (x*sz) (y*sz)
+                sequence_ [renderOnTop canvas $
+                  drawB toCan (x1*sz) (y1*sz) | (x1, y1) <- movesFrom i game]
+              loop game { selection = sel }
             else
               if i `elem` movesFrom (fromJust sel0) game then
                 loop game { state = Anim 0 (fromJust sel0) i }
