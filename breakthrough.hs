@@ -9,11 +9,13 @@ import Haste.Graphics.Canvas
 bnds = ((0,0), (7,7)); sz = 40
 
 data Event = KeyDown Int | Click Int Int
-data State = Won | Play | Anim Int (Int, Int) (Int, Int) deriving Eq
+data State = Won | Play deriving Eq
 data Game = Game { board :: Array (Int, Int) Int
                  , state :: State
                  , player :: Int
                  , selection :: Maybe (Int, Int)
+                 , anim :: Maybe (Int, ((Int, Int), (Int, Int)))
+                 , lastMove :: ((Int, Int), (Int, Int))
                  }
 
 initBoard = let
@@ -22,54 +24,40 @@ initBoard = let
             | True   = 0
   in array bnds [(i, initRow y) | i@(x,y) <- range bnds]
 
-initGame = Game initBoard Play 1 Nothing
+initGame = Game initBoard Play 1 Nothing Nothing undefined
 
-score (Game _ Won player _) = -player * 1024
-score (Game board Play _ _) = -1 * sum [board!i | i <- range bnds]
+score game = if state game == Won then player game * (-1024) else
+  (-1) * sum [(board game)!i | i <- range bnds]
 
-maximize' :: Tree Int -> [Int]
-maximize' (Node leaf []) = [leaf]
-maximize' (Node _ kids) = let
-  mapmin (ns:nss) = (minimum ns : omit (minimum ns) nss)
+omitWith op ((g, ns):nss) = let
   omit pot [] = []
-  omit pot (ns:nss) | minleq ns pot = omit pot nss
-                    | otherwise     = (minimum ns : omit (minimum ns) nss)
-  minleq [] pot = False
-  minleq (n:ns) pot | n <= pot = True
-                    | True     = minleq ns pot
-  in mapmin (map minimize' kids)
-maximize = maximum . maximize'
+  omit pot ((g, ns):nss) | or $ map (`op` pot) ns = omit pot nss
+                         | otherwise = (g, last ns) : omit (last ns) nss
+  in (g, last ns) : omit (last ns) nss
 
-minimize' :: Tree Int -> [Int]
-minimize' (Node leaf []) = [leaf]
-minimize' (Node _ kids) = let
-  mapmax (ns:nss) = (maximum ns : omit (maximum ns) nss)
-  omit pot [] = []
-  omit pot (ns:nss) | maxgeq ns pot = omit pot nss
-                    | otherwise     = (maximum ns : omit (maximum ns) nss)
-  maxgeq [] pot = False
-  maxgeq (n:ns) pot | n >= pot = True
-                    | True     = maxgeq ns pot
-  in mapmax (map maximize' kids)
-minimize = minimum . minimize'
+maximize' :: Tree Game -> [(Game, Int)]
+maximize' (Node leaf []) = [(undefined, score leaf)]
+maximize' (Node g kids) = omitWith (<=) $
+  [(rootLabel k, map snd $ minimize' k) | k <- kids]
 
-gameTree = unfoldTree nextNodes 
+maximize = last . maximize'
 
-nextMoves game@(Game board Play player _) = [(i, dst) | i <- range bnds, board!i == player, dst <- movesFrom i game]
+minimize' :: Tree Game -> [(Game, Int)]
+minimize' (Node leaf []) = [(undefined, score leaf)]
+minimize' (Node g kids) = omitWith (>=) $
+  [(rootLabel k, map snd $ maximize' k) | k <- kids]
 
-nextGames game@(Game board Play player _) = [move game from to | (from, to) <- nextMoves game]
-nextGames game@(Game _ Won _ _) = []
+best game ms = lastMove $ fst $ maximize $ prune 4 $
+  Node game (map (gameTree . move game) ms)
 
-nextNodes game = (game, [g | g <- nextGames game])
+gameTree = unfoldTree (\x -> (x, nextNodes x))
+
+nextMoves game = if state game == Play then [(i, dst) | i <- range bnds, (board game)!i == player game, dst <- movesFrom i game] else []
+
+nextNodes game = map (move game) $ nextMoves game
 
 prune 0 (Node a _) = Node a []
 prune n (Node a kids) = Node a $ map (prune (n - 1)) kids
-
-best game (x:xs) = let
-  sc (from, to) = minimize $ fmap score $ prune 3 $ gameTree $ move game from to
-  f [] n bestYet = bestYet
-  f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
-  in f xs (sc x) x
 
 box :: Int -> Int -> Int -> Int -> Picture ()  -- Why is this needed?
 box x y dx dy = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x+dx), fromIntegral (y+dy))
@@ -82,16 +70,16 @@ drawB pic x y = draw pic (fromIntegral x, fromIntegral y)
 playerName   1  = "White"
 playerName (-1) = "Black"
 
-movesFrom (x, y) game =
-  let
-    b = board game
-    p = player game
+movesFrom (x, y) game = let
+  b = board game
+  p = player game
   in [i1 | dx <- [-1, 0, 1], let i1 = (x + dx, y - p), inRange bnds i1, b!i1 /= p, dx /= 0 || b!i1 == 0]
 
-move (Game board state player _) i0 i1@(_, y1) = let
-  nextBoard = board // [(i0, 0), (i1, player)]
-  nextState = if (player == 1 && y1 == 0) || (player == -1 && y1 == 7) then Won else Play
-  in Game nextBoard nextState (if nextState == Won then player else -player) Nothing
+move game (i0, i1@(_, y1)) = let
+  p = player game
+  nextBoard = board game // [(i0, 0), (i1, p)]
+  nextState = if (p == 1 && y1 == 0) || (p == -1 && y1 == 7) then Won else Play
+  in Game nextBoard nextState (if nextState == Won then p else -p) Nothing Nothing (i0, i1)
 
 main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
   Just canvas <- getCanvas canvasE
@@ -134,36 +122,19 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
         ys <- shuffleIO (a ++ bs)
         return (b:ys)
 
-    drawGame game@(Game board state player _) = do
-      sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderPiece buf p (x*sz, y*sz) | i@(x, y) <- range bnds, let p = board!i, p /= 0]
+    drawGame game = do
+      sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderPiece buf p (x*sz, y*sz) | i@(x, y) <- range bnds, let p = (board game)!i, p /= 0]
       render canvas $ draw buf (0, 0)
-      setProp msg "innerHTML" $ playerName player ++ case state of
+      setProp msg "innerHTML" $ playerName (player game) ++ case state game of
         Play -> " to move"
         Won -> " wins"
-        _ -> " is moving"
 
-    loop game@(Game board (Anim frame from@(x0, y0) to@(x1, y1)) _ _) = do
-      if frame == 8 then
-        let game1 = move game from to in do
-          drawGame game1
-          -- Delay so canvas has a chance to update.
-          if state game1 == Play && player game1 == -1 then
-            setTimeout 20 $ H.concurrent $ do
-            ms <- shuffleIO $ nextMoves game1
-            let (from, to) = best game1 ms in loop game1 { state = Anim 0 from to }
-          else
-            loop game1
-      else let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
-        drawGame game { board = board // [(from, 0)] }
-        renderPiece canvas (player game) (f x0 x1 frame, f y0 y1 frame)
-        setTimeout 20 $ H.concurrent $ loop game { state = Anim (frame + 1) from to }
-
-    loop game@(Game board _ player sel0) = do
+    loop game = if isNothing $ anim game then let sel0 = selection game in do
       e <- H.takeMVar ev
       case e of
         Click bx by -> when (state game == Play) $ let
           i@(x, y) = (div bx sz, div by sz)
-          sel = if board!i == player then Just i else Nothing
+          sel = if (board game)!i == player game then Just i else Nothing
           in when (inRange bnds i) $ do
             render canvas $ draw buf (0, 0)
             if sel0 == Nothing then do
@@ -174,15 +145,28 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
               loop game { selection = sel }
             else
               if i `elem` movesFrom (fromJust sel0) game then
-                loop game { state = Anim 0 (fromJust sel0) i }
+                loop game { anim = Just (0, (fromJust sel0, i)) }
               else
                 loop game { selection = Nothing }
-
         KeyDown 113 -> do
           drawGame initGame
           loop initGame
-
         _ -> loop game
+
+    else let Just (frame, m@((x0, y0), (x1, y1))) = anim game in
+      if frame == 8 then let game1 = move game m in do
+        drawGame game1
+        -- Delay so canvas has a chance to update.
+        if state game1 == Play && player game1 == -1 then
+          setTimeout 20 $ H.concurrent $ do
+          ms <- shuffleIO $ nextMoves game1
+          loop game1 { anim = Just (0, best game1 ms) }
+        else
+          loop game1
+      else let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
+        drawGame game { board = board game // [((x0, y0), 0)] }
+        renderPiece canvas (player game) (f x0 x1 frame, f y0 y1 frame)
+        setTimeout 20 $ H.concurrent $ loop game { anim = Just (frame + 1, m) }
 
     game = initGame in do
       drawGame game

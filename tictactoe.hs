@@ -1,6 +1,8 @@
 import Control.Concurrent.MVar
 import Data.Ix
 import Data.Array
+import Data.Function
+import Data.List
 import Data.Maybe
 import Data.Tree
 import Control.Monad
@@ -41,7 +43,7 @@ move (Game board0 Play player) i = let board = board0 // [(i, player)] in
   else
     Game board Play (nextPlayer player)
 
-nextMoves game@(Game board status player) = (game, case status of
+nextMoves game@(Game board status _) = (game, case status of
   Play -> [move game i | i <- range bnds, board!i == '.']
   _ -> [])
 
@@ -51,17 +53,14 @@ score (Game _ Won 'X') = -1
 score (Game _ Won 'O') = 1
 score _ = 0
 
-maximize (Node leaf []) = score leaf
+maximize (Node leaf []) = leaf
 maximize (Node _ kids) = maximum (map minimize kids)
 
-minimize (Node leaf []) = score leaf
+minimize (Node leaf []) = leaf
 minimize (Node _ kids) = minimum (map maximize kids)
 
-best (x:xs) = let
-  sc x = minimize $ gameTree x
-  f [] n bestYet = bestYet
-  f (x:xs) n bestYet = let n' = sc x in if n' > n then f xs n' x else f xs n bestYet
-  in f xs (sc x) x
+best xs = snd $ maximumBy (compare `on` fst) $
+  map (\x -> (minimize $ fmap score $ gameTree x, x)) xs
 
 handle game@(Game board status player) (MouseDown x y) = let
   j = (x `div` sz, y `div` sz)
@@ -111,13 +110,10 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
       when (c == 'O') $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect sz 0 sz sz)
 
     aiMove :: Game -> IO Game
-    aiMove game@(Game _ Play 'O') = let moves = snd $ nextMoves game in
-      if moveRandomly then do
-        n <- randomRIO (0, length moves - 1)
-        return $ moves!!n
-      else do
-        shuffledMoves <- shuffleIO moves
-        return $ best shuffledMoves
+    aiMove game@(Game _ Play 'O') = do
+      shuffledMoves <- shuffleIO $ snd $ nextMoves game
+      return $ if moveRandomly then head shuffledMoves else
+        best shuffledMoves
     aiMove game = return game
 
     loop game = do
