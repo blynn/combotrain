@@ -143,11 +143,10 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
                 sequence_ [renderOnTop canvas $
                   drawB toCan (x1*sz) (y1*sz) | (x1, y1) <- movesFrom i game]
               loop game { selection = sel }
+            else if i `elem` movesFrom (fromJust sel0) game then
+              loop game { anim = Just (0, (fromJust sel0, i)) }
             else
-              if i `elem` movesFrom (fromJust sel0) game then
-                loop game { anim = Just (0, (fromJust sel0, i)) }
-              else
-                loop game { selection = Nothing }
+              loop game { selection = Nothing }
         KeyDown 113 -> do
           drawGame initGame
           loop initGame

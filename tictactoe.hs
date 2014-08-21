@@ -62,6 +62,25 @@ minimize (Node _ kids) = minimum (map maximize kids)
 best xs = snd $ maximumBy (compare `on` fst) $
   map (\x -> (minimize $ fmap score $ gameTree x, x)) xs
 
+omitWith op ((g, ns):nss) = let
+  omit pot [] = []
+  omit pot ((g, ns):nss) | or $ map (`op` pot) ns = omit pot nss
+                         | otherwise = (g, last ns) : omit (last ns) nss
+  in (g, last ns) : omit (last ns) nss
+
+maximize' :: Tree Game -> [(Game, Int)]
+maximize' (Node leaf []) = [(undefined, score leaf)]
+maximize' (Node g kids) = omitWith (<=) $
+  [(rootLabel k, map snd $ minimize' k) | k <- kids]
+
+minimize' :: Tree Game -> [(Game, Int)]
+minimize' (Node leaf []) = [(undefined, score leaf)]
+minimize' (Node g kids) = omitWith (>=) $
+  [(rootLabel k, map snd $ maximize' k) | k <- kids]
+
+bestAB ms = fst $ last . maximize' $
+  Node undefined (map gameTree ms)
+
 handle game@(Game board status player) (MouseDown x y) = let
   j = (x `div` sz, y `div` sz)
   in if status == Play && inRange bnds j && board!j == '.' then move game j else game
@@ -70,7 +89,7 @@ handle game (KeyDown sym) = case sym of
   113 -> initGame
   _ -> game
 
-main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] -> do
+main = withElems ["body", "canvas", "message", "noab"] $ \[body, canvasElem, message, noab] -> do
   xo <- loadBitmap "xo.png"
   Just canvas <- getCanvas canvasElem
   evq <- newMVar []
@@ -112,8 +131,9 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasElem, message] ->
     aiMove :: Game -> IO Game
     aiMove game@(Game _ Play 'O') = do
       shuffledMoves <- shuffleIO $ snd $ nextMoves game
+      disableAB <- getProp noab "checked"
       return $ if moveRandomly then head shuffledMoves else
-        best shuffledMoves
+        if disableAB == "true" then best shuffledMoves else bestAB shuffledMoves
     aiMove game = return game
 
     loop game = do
