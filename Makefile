@@ -1,5 +1,5 @@
 .PHONY: all push
-all: tictactoe.js netwalk.js breakthrough.js
+all: tictactoe.js netwalk.js breakthrough.js chess.js
 %.js : %.hs ; hastec $^
 push:
 	git push https://code.google.com/p/combotrain master
