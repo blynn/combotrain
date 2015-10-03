@@ -13,31 +13,28 @@ sz = 64; bd = 4; bnds = ((0,0), (2,2))
 moveRandomly = False
 
 data Status = Draw | Won | Play deriving Eq
-data Game = Game (Array (Int, Int) Char) Status Char
+data Game = Game (Array (Int, Int) Int) Status Int
 
-initGame = Game (listArray bnds $ repeat '.') Play 'X'
+initGame = Game (listArray bnds $ repeat 0) Play (-1)
 
-goals = [join (,) <$> [0..2], ap (,) (2-) <$> [0..2]]  -- Diagonals.
+goals = [join (,) <$> [0..2], (,) <*> (2-) <$> [0..2]]  -- Diagonals.
         ++ ((<$> [0..2]) .      (,) <$> [0..2])  -- Rows and columns.
         ++ ((<$> [0..2]) . flip (,) <$> [0..2])
 
 move (Game board0 Play player) i
   | or $ and . ((== player) . (board!) <$>) <$> goals = Game board Won  player
-  | Nothing == find (== '.') (elems board)            = Game board Draw player
-  | otherwise                            = Game board Play $ case player of
-    'X' -> 'O'
-    'O' -> 'X'
+  | Nothing == find (== 0) (elems board)              = Game board Draw player
+  | otherwise                            = Game board Play $ -player
   where board = board0 // [(i, player)]
 
 nextMoves game@(Game board status _) = (game, case status of
-  Play -> [move game i | i <- range bnds, board!i == '.']
-  _ -> [])
+  Play -> [move game i | i <- range bnds, board!i == 0]
+  _    -> [])
 
 gameTree = unfoldTree nextMoves
 
-score (Game _ Won 'X') = -1
-score (Game _ Won 'O') = 1
-score _                = 0
+score (Game _ Won n) = n
+score _              = 0
 
 maximize (Node leaf [])   = leaf
 maximize (Node _    kids) = maximum (map minimize kids)
@@ -64,7 +61,7 @@ minimize' (Node leaf [])   = [(undefined, score leaf)]
 minimize' (Node _    kids) = omitWith (>=)
   [(rootLabel k, snd <$> maximize' k) | k <- kids]
 
-bestAB ms = fst $ last . maximize' $ Node undefined (map gameTree ms)
+bestAB ms = fst $ last . maximize' $ Node undefined $ map gameTree ms
 
 intRect x y w h = Rect (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
 
@@ -86,15 +83,15 @@ main = withElems ["body", "canvas", "message", "noab"] $
     shuffleIO xs = randomRIO (0, length xs - 1) >>= \n ->
       let (a, b:bs) = splitAt n xs in (b:) <$> shuffleIO (a ++ bs)
 
-    sq ((x, y), c) = do
+    sq ((x, y), p) = do
       -- Draw borders.
       when (x /= 0) $ oblong (x * sz)           (y * sz) bd sz
       when (x /= 2) $ oblong (x * sz + sz - bd) (y * sz) bd sz
       when (y /= 0) $ oblong (x * sz)           (y * sz) sz bd
       when (y /= 2) $ oblong (x * sz) (y * sz + sz - bd) sz bd
       -- Draw nought or cross when present.
-      when (c == 'X') $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect 0 0 sz sz)
-      when (c == 'O') $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect sz 0 sz sz)
+      when (p == -1) $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect 0 0 sz sz)
+      when (p ==  1) $ drawClipped xo (fromIntegral (x * sz), fromIntegral (y * sz)) (intRect sz 0 sz sz)
 
     aiMove game = do
       shuffledMoves <- shuffleIO $ snd $ nextMoves game
@@ -108,15 +105,15 @@ main = withElems ["body", "canvas", "message", "noab"] $
       game@(Game board status player) <- readMVar gameVar
       render canvas $ mapM_ sq $ assocs board
       setProp message "innerHTML" $ case status of
-        Won  -> player : " wins"
+        Won  -> ("X.O"!!(player + 1)) : " wins"
         Draw -> "Draw"
-        Play -> if player == 'X' then "X to move" else "Thinking..."
-      when (player == 'O' && status == Play) $ setTimeout 1 $ aiMove game >>= go
+        Play -> if player == -1 then "X to move" else "Thinking..."
+      when (player == 1 && status == Play) $ setTimeout 1 $ aiMove game >>= go
 
   void $ cElem `onEvent` OnMouseDown $ \_ (x, y) -> do
     game@(Game board status player) <- readMVar gameVar
-    let i = (x `div` sz, y `div` sz) in when (status == Play && player == 'X'
-       && inRange bnds i && board!i == '.') $ go $ move game i
+    let i = (x `div` sz, y `div` sz) in when (status == Play && player == -1
+       && inRange bnds i && board!i == 0) $ go $ move game i
 
   void $ body `onEvent` OnKeyDown $ \k -> when (k == 113) $ go initGame
 
