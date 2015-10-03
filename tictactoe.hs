@@ -17,10 +17,6 @@ data Game = Game (Array (Int, Int) Char) Status Char
 
 initGame = Game (listArray bnds $ repeat '.') Play 'X'
 
-intRect x y w h = Rect (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-
-oblong x y w h = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + w), fromIntegral (y + h))
-
 goals = [join (,) <$> [0..2], ap (,) (2-) <$> [0..2]]  -- Diagonals.
         ++ ((<$> [0..2]) .      (,) <$> [0..2])  -- Rows and columns.
         ++ ((<$> [0..2]) . flip (,) <$> [0..2])
@@ -54,23 +50,28 @@ best xs = snd $ maximumBy (compare `on` fst) $
 
 omitWith op ((g, ns):nss) = let
   omit _   [] = []
-  omit pot ((g, ns):nss) | or $ map (`op` pot) ns = omit pot nss
+  omit pot ((g, ns):nss) | any (`op` pot) ns = omit pot nss
                          | otherwise = (g, last ns) : omit (last ns) nss
   in (g, last ns) : omit (last ns) nss
 
 maximize' :: Tree Game -> [(Game, Int)]
 maximize' (Node leaf [])   = [(undefined, score leaf)]
-maximize' (Node _    kids) = omitWith (<=) $
+maximize' (Node _    kids) = omitWith (<=)
   [(rootLabel k, snd <$> minimize' k) | k <- kids]
 
 minimize' :: Tree Game -> [(Game, Int)]
 minimize' (Node leaf [])   = [(undefined, score leaf)]
-minimize' (Node _    kids) = omitWith (>=) $
+minimize' (Node _    kids) = omitWith (>=)
   [(rootLabel k, snd <$> maximize' k) | k <- kids]
 
 bestAB ms = fst $ last . maximize' $ Node undefined (map gameTree ms)
 
-main = withElems ["body", "canvas", "message", "noab"] $ \[body, cElem, message, noab] -> do
+intRect x y w h = Rect (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+
+oblong x y w h = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + w), fromIntegral (y + h))
+
+main = withElems ["body", "canvas", "message", "noab"] $
+                \[body, cElem, message, noab] -> do
   xo <- loadBitmap "xo.png"
   Just canvas <- getCanvas cElem
   seedVar <- newSeed >>= newMVar
@@ -83,7 +84,7 @@ main = withElems ["body", "canvas", "message", "noab"] $ \[body, cElem, message,
 
     shuffleIO [] = return []
     shuffleIO xs = randomRIO (0, length xs - 1) >>= \n ->
-      let (a, b:bs) = splitAt n xs in shuffleIO (a ++ bs) >>= return . (b:)
+      let (a, b:bs) = splitAt n xs in (b:) <$> shuffleIO (a ++ bs)
 
     sq ((x, y), c) = do
       -- Draw borders.
@@ -101,6 +102,8 @@ main = withElems ["body", "canvas", "message", "noab"] $ \[body, cElem, message,
       return $ if moveRandomly then head shuffledMoves else
         if disableAB == "true" then best shuffledMoves else bestAB shuffledMoves
 
+    go game = swapMVar gameVar game >> update
+
     update = do
       game@(Game board status player) <- readMVar gameVar
       render canvas $ mapM_ sq $ assocs board
@@ -108,16 +111,13 @@ main = withElems ["body", "canvas", "message", "noab"] $ \[body, cElem, message,
         Won  -> player : " wins"
         Draw -> "Draw"
         Play -> if player == 'X' then "X to move" else "Thinking..."
-      when (player == 'O' && status == Play) $ setTimeout 1 $
-        aiMove game >>= swapMVar gameVar >> update
+      when (player == 'O' && status == Play) $ setTimeout 1 $ aiMove game >>= go
 
   void $ cElem `onEvent` OnMouseDown $ \_ (x, y) -> do
     game@(Game board status player) <- readMVar gameVar
     let i = (x `div` sz, y `div` sz) in when (status == Play && player == 'X'
-       && inRange bnds i && board!i == '.') $
-         swapMVar gameVar (move game i) >> update
+       && inRange bnds i && board!i == '.') $ go $ move game i
 
-  void $ body `onEvent` OnKeyDown $ \k ->
-    when (k == 113) $ swapMVar gameVar initGame >> update
+  void $ body `onEvent` OnKeyDown $ \k -> when (k == 113) $ go initGame
 
   update
