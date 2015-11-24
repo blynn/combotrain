@@ -32,7 +32,7 @@ tile x y n = color (RGB c c c) $ fill $ rect (fromIntegral x, fromIntegral y)
   (fromIntegral $ x + sz, fromIntegral $ y + sz)
   where c = if n == m^2 then 0 else 255 - (225 * (n - 1) `div` (m^2 - 1))
 
-main = withElems ["body", "canvas"] $ \[body, cElem] -> do
+main = withElems ["canvas"] $ \[cElem] -> do
   Just canvas <- getCanvas cElem
   ev <- newEmptyMVar
   let
@@ -56,7 +56,7 @@ main = withElems ["body", "canvas"] $ \[body, cElem] -> do
   cElem `onEvent` MouseDown $
     \(MouseData (x, y) _ _) -> takeMVar ev >>= \(q, b) ->
       try q (head [i | i <- range bnds, b!i == m^2]) (y `div` sz, x `div` sz) b
-  body  `onEvent` KeyDown   $ \k -> takeMVar ev >>= \(q, b) -> let
+  documentBody `onEvent` KeyDown $ \k -> takeMVar ev >>= \(q, b) -> let
     (r0, c0) = head [i | i <- range bnds, b!i == m^2]
     (r , c ) = case k of 38  -> (r0 + 1, c0)
                          40  -> (r0 - 1, c0)
