@@ -8,6 +8,8 @@ import Control.Applicative
 import Control.Monad
 import Data.Array
 import Haste
+import Haste.DOM
+import Haste.Events
 import Haste.Graphics.Canvas
 
 data Event = Ready | Slide Int (Int, Int) (Int, Int) deriving Eq
@@ -43,16 +45,18 @@ main = withElems ["body", "canvas"] $ \[body, cElem] -> do
                  (sz*r + sz*(r0 - r) * frame `div` frameCnt) (b!(r,c))
           if frame == frameCnt - 1
             then putMVar ev (Ready, b // [(i, b!i0), (i0, b!i)]) >> loop
-            else putMVar ev (Slide (frame + 1) i0 i, b) >> setTimeout 10 loop
+            else putMVar ev (Slide (frame + 1) i0 i, b) >>
+              void (setTimer (Once 10) loop)
         _ -> putMVar ev (q, b)
     newGame = gen >>= putMVar ev . (,) Ready >> loop
     try q i0@(r0, c0) i@(r, c) b =
       if inRange bnds (r, c) && abs (c - c0) + abs (r - r0) == 1
         then putMVar ev (Slide 0 i0 i, b) >> when (q == Ready) loop
         else putMVar ev (q, b)
-  cElem `onEvent` OnMouseDown $ \_ (x, y) -> takeMVar ev >>= \(q, b) ->
-    try q (head [i | i <- range bnds, b!i == m^2]) (y `div` sz, x `div` sz) b
-  body  `onEvent` OnKeyDown   $ \k        -> takeMVar ev >>= \(q, b) -> let
+  cElem `onEvent` MouseDown $
+    \(MouseData (x, y) _ _) -> takeMVar ev >>= \(q, b) ->
+      try q (head [i | i <- range bnds, b!i == m^2]) (y `div` sz, x `div` sz) b
+  body  `onEvent` KeyDown   $ \k -> takeMVar ev >>= \(q, b) -> let
     (r0, c0) = head [i | i <- range bnds, b!i == m^2]
     (r , c ) = case k of 38  -> (r0 + 1, c0)
                          40  -> (r0 - 1, c0)
