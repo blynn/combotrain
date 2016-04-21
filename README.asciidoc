@@ -13,3 +13,15 @@ pruning, which is tolerable on modern systems.
 
 A JavaScript version of https://code.google.com/p/netwalk/[my C implementation
 of a puzzle game].
+
+== Chess ==
+
+Searches a few ply. Evaluation function only scores material.
+
+== Breakthrough ==
+
+Searches a few ply. Evaluation function only scores material.
+
+== Peg Solitaire ==
+
+English board.

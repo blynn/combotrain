@@ -1,6 +1,4 @@
 .PHONY: all push
-all: tictactoe.js netwalk.js breakthrough.js chess.js
+all: tictactoe.js netwalk.js breakthrough.js chess.js peg.js
 %.js : %.hs ; hastec --opt-whole-program $^
-git-push:
-	git push https://code.google.com/p/combotrain master
-	git push git@github.com:blynn/combotrain.git master
+git-push: ; git push git@github.com:blynn/combotrain.git master
