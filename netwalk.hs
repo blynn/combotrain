@@ -1,9 +1,10 @@
 import Control.Concurrent.MVar
 import Control.Monad
-import Data.Ix
 import Data.Array
 import Data.List
 import Haste
+import Haste.DOM
+import Haste.Events
 import Haste.Graphics.Canvas
 
 bnds = ((0,0), (9,8))
@@ -27,7 +28,7 @@ gen seeds board (r:r1:rs) = let
   (as, b@(Tile i@(x, y) w):bs) = splitAt (mod r $ length seeds) seeds
   exits = [(j, dj) | dj@(dx,dy) <- [(1,0),(0,-1),(-1,0),(0,1)],
     let j = (x+dx, y+dy), inRange bnds j, (board!j) == Blank,
-    (i /= srcTop || dx == 0)]
+    i /= srcTop || dx == 0]
   in if null exits then gen (as ++ bs) board (r1:rs) else let
     (j, dj@(dx,dy)) = exits!!(r1 `mod` length exits)
     augT = Tile i (dj:w)
@@ -41,17 +42,16 @@ scramble board rs = let
 
 scrambleSrc board r = iterate srcRot board !! (r `mod` 4)
 
-followLive game = let
-  board = Main.board game
-  f [] live n = (live, n)
-  f (i@(x, y):is) live n = if (live!i) then f is live n else let
-    js = [j | (dx,dy) <- ways (board!i), let j = (x+dx, y+dy), inRange bnds j,
-          ((-dx, -dy) `elem` ways (board!j)), not (live!j)]
-    in f (is ++ js) (live // [(i, True)]) (n + 1)
-  (live, n) = f [srcBot] (listArray bnds $ repeat False) 0
-  in game { live = live, state = if n == rangeSize bnds then Won else Play }
-
-data Event = KeyDown Int | Click Int Int
+followLive game = f [srcBot] (listArray bnds $ repeat False) 0 where
+  f [] live n =
+    game { live = live, state = if n == rangeSize bnds then Won else Play }
+  f (i@(x, y):is) live n
+    | live!i = f is live n
+    | otherwise = f (is ++ js) (live // [(i, True)]) (n + 1)
+    where
+      board = Main.board game
+      js = [j | (dx,dy) <- ways (board!i), let j = (x+dx, y+dy), inRange bnds j,
+        (-dx, -dy) `elem` ways (board!j), not (live!j)]
 
 rot (Tile i w) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) w
 
@@ -66,19 +66,20 @@ newPackets board i = [(i, dj, 0) | dj <- ways (board!i)]
 initGame rs = let
   top = Tile srcTop [(0, 1)]
   bot = Tile srcBot [(0, -1)]
-  (board, rs1) = gen [top, bot] ((listArray bnds $ repeat Blank) //
+  (board, rs1) = gen [top, bot] (listArray bnds (repeat Blank) //
     [(srcTop, top), (srcBot, bot)]) rs
   in followLive $ Game board undefined Play rs1 []
 
-handle game@(Game board live state _ packets) (Click mx my:_) = let
-  i = (mx `div` 32, my `div` 32)
-  in if inRange bnds i then
-    if state == Play then (followLive $
-      if isSrc i then game { board = srcRot board }
-      else game { board = board // [(i, rot $ board!i)] }, True)
-    else (game { packets = packets ++ newPackets board i }, False)
-  else (game, False)
-handle game (KeyDown 113:_) = (initGame (rands game), True)
+-- We only handle the oldest event. We could simplify evq.
+handle game@(Game board live state _ packets) (Mo (mx, my):_)
+  | not $ inRange bnds i = (game, False)
+  | state == Play        =
+   (followLive $ game { board =
+     if isSrc i then srcRot board else board // [(i, rot $ board!i)] }, True)
+  | otherwise            =
+   (game { packets = packets ++ newPackets board i }, False)
+  where i = (mx `div` 32, my `div` 32)
+handle game (Ke 113:_) = (initGame (rands game), True)
 handle game _ = (game, False)
 
 lineB :: Int -> Int -> Int -> Int -> Shape ()
@@ -91,28 +92,28 @@ rectB c x y dx dy = do
 drawB p (x, y) = draw p (fromIntegral x, fromIntegral y)
 
 paint pic = do
-  Just can <- createCanvas 32 32
+  can <- createCanvas 32 32
   render can pic
   return can
 
+data Event = Mo (Int, Int) | Ke Int
+
 main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
-  evq <- newMVar [KeyDown 113]
-  canvasE  `onEvent` OnMouseDown $ \_button (x, y) -> do
-    q <- takeMVar evq
-    putMVar evq (q ++ [Click x y])
-  body `onEvent` OnKeyDown $ \_k -> do
-    q <- takeMVar evq
-    putMVar evq (q ++ [KeyDown _k])
-  Just canvas <- getCanvas canvasE
-  Just grid <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
-  Just buf  <- let (x, y) = snd bnds in createCanvas ((x+1)*32) ((y+1)*32)
+  evq <- newMVar [Ke 113]
+  canvasE `onEvent` MouseDown $
+    \m -> modifyMVar_ evq $ pure . (++ [Mo $ mouseCoords m])
+  body `onEvent` KeyDown $
+    \k -> modifyMVar_ evq $ pure . (++ [Ke $ keyCode k])
+  Just canvas <- fromElem canvasE
+  [grid, buf] <- let (x, y) = snd bnds in
+    replicateM 2 $ createCanvas ((x+1)*32) ((y+1)*32)
   liveEnd <- paint $ rectB (RGB 255 255 0) 9 9 14 14
   deadEnd <- paint $ rectB (RGB 191 191 191) 10 10 13 13
-  packet  <- paint $ (color (RGB 0 0 0) $ fill $ circle (16, 16) 5) >>
-                     (color (RGB 255 255 255) $ fill $ circle (16, 16) 4)
+  packet  <- paint $ color (RGB 0 0 0) (fill $ circle (16, 16) 5) >>
+                     color (RGB 255 255 255) (fill $ circle (16, 16) 4)
   render grid $ color (RGB 192 192 192) $ sequence_
-    $ [ stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
-    ++ [ stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
+    $ [stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
+    ++ [stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
   seed <- newSeed
   let
     colWire False = color (RGB 255 127 127)
@@ -124,10 +125,8 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
       sequence_ [renderOnTop buf $ colWire live $ stroke $
         lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
       when (length w == 1) $ renderOnTop buf $ drawB (endPic live) (ox, oy)
-    loop game = do
-      q <- swapMVar evq []
-      let
-        (game1@(Game board live state rs packets), isDirty) = handle game q
+    loop game = handle game <$> swapMVar evq [] >>=
+      \(game1@(Game board live state rs packets), isDirty) -> let
         adv packet@((x, y), (dx, dy), t) =
           if t < 16 - 1 then [((x, y), (dx, dy), t + 1)] else let
             (x1, y1) = (x + dx, y + dy)
@@ -143,8 +142,8 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
           game2 <- if state == Won then do
             sequence_ [renderOnTop canvas $ drawB packet
               (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
-            return $ game1 { packets = (if null packets then
-              newPackets board srcBot else concat $ map adv packets) }
+            return $ game1 { packets = if null packets then
+              newPackets board srcBot else concatMap adv packets }
           else return game1
-          setTimeout 20 $ loop game2
+          void $ setTimer (Once 20) $ loop game2
     in loop $ Game undefined undefined undefined (randomRs (0, 2^20 :: Int) seed) undefined

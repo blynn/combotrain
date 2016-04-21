@@ -25,7 +25,7 @@ initState = foldl' (\m k -> M.insert k (k /= (3, 3)) m) M.empty
   [(r, c) | r <- [0..6], c <- [0..6], ctr r || ctr c]
 
 main = withElems ["canvas"] $ \[cElem] -> do
-  Just canvas <- getCanvas cElem
+  Just canvas <- fromElem cElem
   ref <- newIORef (initState, Nothing)
 
   let

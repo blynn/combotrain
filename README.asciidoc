@@ -4,24 +4,12 @@ Written in Haskell. Requires http://haste-lang.org/[the Haste compiler].
 
 https://crypto.stanford.edu/~blynn/play/[Play now!]
 
-== Tic Tac Toe ==
-
-Human moves first. Computer opponent minimaxes the full game tree with no
+ * Tic Tac Toe: Human moves first. Computer opponent minimaxes the full game tree with no
 pruning, which is tolerable on modern systems.
 
-== Netwalk ==
+ * Netwalk: Rewrite of https://code.google.com/p/netwalk/[my C implementation
+ of a puzzle game].
 
-A JavaScript version of https://code.google.com/p/netwalk/[my C implementation
-of a puzzle game].
-
-== Chess ==
-
-Searches a few ply. Evaluation function only scores material.
-
-== Breakthrough ==
-
-Searches a few ply. Evaluation function only scores material.
-
-== Peg Solitaire ==
-
-English board.
+ * Chess: Searches a few ply. Evaluation function only scores material.
+ * Breakthrough: Searches a few ply. Evaluation function only scores material.
+ * Peg Solitaire: English board.
