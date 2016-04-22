@@ -3,12 +3,15 @@ import Data.Array
 import Data.Maybe
 import Data.Tree
 import Haste
+import Haste.Concurrent hiding ((!))
 import qualified Haste.Concurrent as H
+import Haste.DOM
+import Haste.Events
 import Haste.Graphics.Canvas
 
 bnds = ((0,0), (7,7)); sz = 40
 
-data Event = KeyDown Int | Click Int Int
+data Event = Mo (Int, Int) | Ke Int
 data State = Won | Play deriving Eq
 data Game = Game { board :: Array (Int, Int) Int
                  , state :: State
@@ -18,11 +21,11 @@ data Game = Game { board :: Array (Int, Int) Int
                  , lastMove :: ((Int, Int), (Int, Int))
                  }
 
-initBoard = let
-  initRow y | y <= 1 = -1
-            | y >= 6 = 1
-            | True   = 0
-  in array bnds [(i, initRow y) | i@(x,y) <- range bnds]
+initRow y | y <= 1 = -1
+          | y >= 6 = 1
+          | True   = 0
+
+initBoard = array bnds [(i, initRow y) | i@(x,y) <- range bnds]
 
 initGame = Game initBoard Play 1 Nothing Nothing undefined
 
@@ -82,37 +85,37 @@ move game (i0, i1@(_, y1)) = let
   in Game nextBoard nextState (if nextState == Won then p else -p) Nothing Nothing (i0, i1)
 
 main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
-  Just canvas <- getCanvas canvasE
-  Just whitePiece <- createCanvas sz sz
+  Just canvas <- fromElem canvasE
+  whitePiece <- createCanvas sz sz
   renderOnTop whitePiece $ color (RGB 255 255 255) $ fill $ circle (20, 20) 10
   renderOnTop whitePiece $ color (RGB 0 0 0) $ stroke $ circle (20, 20) 11
-  Just blackPiece <- createCanvas sz sz
+  blackPiece <- createCanvas sz sz
   renderOnTop blackPiece $ color (RGB 0 0 0) $ fill $ circle (20, 20) 11
 
-  Just fromCan <- createCanvas sz sz
+  fromCan <- createCanvas sz sz
   render fromCan $ color (RGB 127 15 15) $ sequence_
     [ box 0 0 5 40, box 0 0 40 5, box 35 0 40 40, box 0 35 40 40 ]
-  Just toCan <- createCanvas sz sz
+  toCan <- createCanvas sz sz
   render toCan $ color (RGBA 0 191 0 0.3) $ box 0 0 sz sz
 
-  Just boardCan <- createCanvas 320 320
+  boardCan <- createCanvas 320 320
   sequence_ $ [renderOnTop boardCan $ color (sqColor (mod (x + y) 2 == 0)) $ box (x*sz) (y*sz) sz sz | (x, y) <- range bnds]
-  Just buf <- createCanvas 320 320
+  buf <- createCanvas 320 320
 
-  ev <- H.newEmptyMVar
-  canvasE  `onEvent` OnMouseDown $ \_button (x, y) -> H.concurrent $ H.putMVar ev $ Click x y
-  body `onEvent` OnKeyDown $ \k -> H.concurrent $ H.putMVar ev $ KeyDown k
+  ev <- newEmptyMVar
+  canvasE  `onEvent` MouseDown $ \m -> concurrent $ putMVar ev $ Mo $ mouseCoords m
+  body `onEvent` KeyDown $ \k -> concurrent $ putMVar ev $ Ke $ keyCode k
 
   seed <- newSeed
-  seedV <- H.newMVar seed
+  seedV <- newMVar seed
 
   let
     renderPiece c p (x,y) = renderOnTop c $ draw (if p == 1 then whitePiece else blackPiece) (fromIntegral x, fromIntegral y)
 
     randomRIO range = do
-      seed <- H.takeMVar seedV
+      seed <- takeMVar seedV
       let (r, seed1) = randomR range seed in do
-        H.putMVar seedV seed1
+        putMVar seedV seed1
         return r
 
     shuffleIO [] = return []
@@ -130,9 +133,9 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
         Won -> " wins"
 
     loop game = if isNothing $ anim game then let sel0 = selection game in do
-      e <- H.takeMVar ev
+      e <- takeMVar ev
       case e of
-        Click bx by -> when (state game == Play) $ let
+        Mo (bx, by) -> when (state game == Play) $ let
           i@(x, y) = (div bx sz, div by sz)
           sel = if (board game)!i == player game then Just i else Nothing
           in when (inRange bnds i) $ do
@@ -147,17 +150,14 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
               loop game { anim = Just (0, (fromJust sel0, i)) }
             else
               loop game { selection = Nothing }
-        KeyDown 113 -> do
-          drawGame initGame
-          loop initGame
+        Ke 113 -> drawGame initGame >> loop initGame
         _ -> loop game
 
     else let Just (frame, m@((x0, y0), (x1, y1))) = anim game in
       if frame == 8 then let game1 = move game m in do
         drawGame game1
-        -- Delay so canvas has a chance to update.
         if state game1 == Play && player game1 == -1 then
-          setTimeout 20 $ H.concurrent $ do
+          void $ setTimer (Once 1) $ do  -- Delay for redraw.
           ms <- shuffleIO $ nextMoves game1
           loop game1 { anim = Just (0, best game1 ms) }
         else
@@ -165,8 +165,6 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
       else let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
         drawGame game { board = board game // [((x0, y0), 0)] }
         renderPiece canvas (player game) (f x0 x1 frame, f y0 y1 frame)
-        setTimeout 20 $ H.concurrent $ loop game { anim = Just (frame + 1, m) }
+        void $ setTimer (Once 20) $ loop game { anim = Just (frame + 1, m) }
 
-    game = initGame in do
-      drawGame game
-      H.concurrent $ H.forkIO $ loop game
+  concurrent $ forkIO $ drawGame initGame >> loop initGame
