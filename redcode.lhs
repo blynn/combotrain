@@ -1,13 +1,13 @@
-= Core Wars =
+= Core War =
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script src="redcode.js"></script>
 <canvas id="canvas" style="border: 1px solid black;" width="300" height="240">
 </canvas>
-<p><textarea id="con" rows="5" cols="80" readonly>
-</textarea></p>
-<p><button id="goB">Go!</button></p>
-<p><textarea id="player1" rows="25" cols="20" spellcheck="false">
+<p><textarea id="con" rows="5" cols="80" readonly></textarea></p>
+<p><button id="goB">Restart</button>
+<button id="stopB">Halt</button></p>
+<p><textarea id="player1" rows="25" cols="16" spellcheck="false">
 jmp 3
 dat 0
 dat 99
@@ -19,6 +19,12 @@ add #1, -5
 jmp -5
 mov #99, 93
 jmp 93
+</textarea>
+<textarea id="player2" rows="25" cols="16" spellcheck="false">
+add #4, 3
+mov 2, @2
+jmp -2
+dat 0
 </textarea></p>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -46,13 +52,15 @@ import Haste.Graphics.Canvas
 type Arg = (Char, Int)
 data Op = Op String Arg Arg deriving (Show, Eq)
 type Core = Map Int Op
-data Game = Game Core Int deriving Show
+data Game = Game Core [(Int, [Int])] deriving Show
 
 sz = 8000
 
-initCore = M.fromList $ zip [0..sz - 1] $ repeat $ Op "DAT" ('$', 0) ('$', 0)
+initCore = M.fromList $ zip [0..sz - 1] $ repeat $ Op "DAT" ('#', 0) ('#', 0)
 
-exe (Op op (ma, a) (mb, b)) (Game c ip) = f op ma mb where
+exe c ip = f op ma mb where
+  Op op (ma, a) (mb, b) = c!ip
+  f "DAT" _   _ = ([], [])
   f "NOP" _   _ = ([], adv ip)
   f "MOV" '#' _ = ([(rb, putB aa ib)], adv ip)
   f "MOV" _ '#' = ([(rb, putB ba ib)], adv ip)
@@ -66,15 +74,16 @@ exe (Op op (ma, a) (mb, b)) (Game c ip) = f op ma mb where
   f "ADD" '#' _ = ([(rb, putB (add a $ bb) ib)], adv ip)
   f "ADD" _ '#' = ([(rb, putB (add ba $ bb) ib)], adv ip)
   f "ADD" _   _ = ([(rb, putA (add aa $ ab) $ putB (add ba $ bb) ib)], adv ip)
-  f "JMP" _   _ = ([], ra)
+  f "SPL" _   _ = ([], ra:adv ip)
+  f "JMP" _   _ = jumpIf True      ra
   f "JMN" _   _ = jumpIf (bb /= 0) ra
   f "JMZ" _   _ = jumpIf (bb == 0) ra
   f "DJN" _   _ = effect [(rb, putB (sub bb 1) ib)] $ jumpIf (bb /= 1) ra
   f "DJZ" _   _ = effect [(rb, putB (sub bb 1) ib)] $ jumpIf (bb == 1) ra
   f op _ _ = error $ "huh " ++ op
-  jumpIf True  a = ([], a)
+  jumpIf True  a = ([], [a])
   jumpIf False _ = ([], adv ip)
-  skipIf True  = ([], adv $ adv ip)
+  skipIf True  = ([], map (add 1) $ adv ip)
   skipIf False = ([], adv ip)
   effect es (ds, a) = (ds ++ es, a)
   ra = resolve c ip (ma, a)
@@ -98,7 +107,7 @@ putB b (Op op ma (m, _)) = Op op ma (m, b)
 add x y = (x + y) `mod` sz
 sub x y = (x + sz - y) `mod` sz
 
-adv ip = add ip 1
+adv ip = [add ip 1]
 
 num :: Parser Int
 num = do
@@ -115,7 +124,8 @@ standardize n | m < 0     = sz - m
               | otherwise = m
               where m = mod n sz
 
-known = S.fromList $ words "MOV ADD SUB JMP JMZ JMN DJZ DJN SEQ SNE DAT"
+known = flip S.member $ S.fromList $ words "MOV ADD SUB JMP JMZ JMN DJZ DJN SEQ SNE DAT SPL"
+isJump = flip S.member $ S.fromList $ words "JMP JMZ JMN DJZ DJN SPL"
 
 unalias "CMP" = "SNE"
 unalias "JMG" = "JMN"
@@ -125,35 +135,24 @@ asm :: Parser Op
 asm = do
   spaces
   op <- unalias . map toUpper <$> many1 letter
-  if op `S.notMember` known then
-    fail $ "unknown: " ++ op
-  else do
+  if not $ known op then fail $ "unknown: " ++ op else do
     a <- arg
     m <- optionMaybe $ optional (try $ spaces >> char ',') >> arg
     spaces
     eof
     case m of
       Just b -> return $ Op op a b
-      Nothing -> case op of
-        "JMP" -> return $ Op op a ('#', 0)
-        "DAT" -> return $ Op op ('#', 0) a
-        _ -> fail $ "needs 2 args: " ++ op
+      Nothing -> if isJump op then return $ Op op a ('#', 0)
+        else if op == "DAT"  then return $ Op op ('#', 0) a
+        else fail $ "needs 2 args: " ++ op
 
 load ops a c = foldl' f c $ zip [a..] ops where f c (k, v) = M.insert k v c
 
-demo = load ops 0 where
-  Right ops = mapM (parse asm "")
-    ["jmp 3", "dat 0", "dat 99",
-     "mov @-2, @-1", "sne -3, #9", "jmp 4",
-     "add #1, -5", "add #1, -5", "jmp -5",
-     "mov #99, 93", "jmp 93"]
-    --["add #4, 3", "mov 2, @2", "jmp -2", "dat 0"]
+passive = [RGB 191 63 63, RGB 63 63 191]
+active = [RGB 255 127 127, RGB 127 127 255]
 
-passive1 = RGB 191 63 63
-active1 = RGB 255 127 127
-
-main = withElems ["canvas", "player1", "con", "goB"] $
-     \[canvasE, player1E, conE, goB] -> do
+main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
+     \[canvasE, player1E, player2E, conE, goB, stopB] -> do
   Just canvas <- fromElem canvasE
   gv <- newMVar Nothing
   let
@@ -168,15 +167,27 @@ main = withElems ["canvas", "player1", "con", "goB"] $
         Just g -> step g
         Nothing -> putMVar gv Nothing
 
-    step g@(Game c ip) = do
+    step g@(Game c []) = do
+      putMVar gv $ Nothing
+      v0 <- getProp conE "value"
+      setProp conE "value" $ v0 ++ "all programs halted\n"
+
+    step g@(Game c ((id, ip:rest):players)) = do
       let
-        (deltas, ip1) = exe (c!ip) g
-        g1 = Game (foldl' ins c deltas) ip1
+        (deltas, next) = exe c ip
+        ipq = take 8000 $ rest ++ next
         ins c (k, v) = M.insert k v c
-      mark passive1 ip
-      mapM (mark passive1 . fst) deltas
-      mark active1 ip1
-      putMVar gv $ Just g1
+        c1 = foldl' ins c deltas
+      mark (passive!!id) ip
+      mapM (mark (passive!!id) . fst) deltas
+      case ipq of
+        (h:_) -> do
+          mark (active!!id) $ head ipq
+          putMVar gv $ Just $ Game c1 $ players ++ [(id, ipq)]
+        [] -> do
+          v0 <- getProp conE "value"
+          setProp conE "value" $ v0 ++ "program " ++ show id ++ " halted\n"
+          putMVar gv $ Just $ Game c1 players
 
     newMatch = do
       render canvas $ color (RGB 0 0 0) $ fill $ rect (0, 0) (300, 240)
@@ -185,14 +196,34 @@ main = withElems ["canvas", "player1", "con", "goB"] $
         Left err -> do
           swapMVar gv Nothing
           setProp conE "value" $ show err
-        Right ops -> do
-          mapM_ (mark passive1) [0..length ops - 1]
-          let
-            g = Game (load ops 0 initCore) 0
-          mark active1 0
-          void $ swapMVar gv $ Just g
+        Right p1 -> do
+          s <- getProp player2E "value"
+          case mapM (parse asm "") $ lines s of
+            Left err -> do
+              swapMVar gv Nothing
+              setProp conE "value" $ show err
+            Right p2 -> gameOn p1 p2
+
+    gameOn p1 p2 = do
+      mapM_ (mark $ passive!!0) [0..length p1 - 1]
+      mark (active!!0) 0
+      mapM_ (mark $ passive!!1) [4000..4000 + length p2 - 1]
+      mark (active!!1) 4000
+      void $ swapMVar gv $ Just $ Game
+        (load p2 4000 $ load p1 0 initCore) [(0, [0]), (1, [4000])]
+      setProp conE "value" $ "running programs: 0 vs 1\n"
 
   void $ goB `onEvent` Click $ \_ -> newMatch
+
+  void $ stopB `onEvent` Click $ \_ -> do
+    jg <- takeMVar gv
+    case jg of
+      Just _ -> do
+        v0 <- getProp conE "value"
+        setProp conE "value" $ v0 ++ "match halted\n"
+      Nothing -> pure ()
+    putMVar gv Nothing
+
 
   newMatch
   void $ setTimer (Repeat 16) tryStep
