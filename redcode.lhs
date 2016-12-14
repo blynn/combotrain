@@ -1,5 +1,6 @@
 = Core War =
 
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script src="redcode.js"></script>
 <canvas id="canvas" style="border: 1px solid black;" width="300" height="240">
@@ -8,25 +9,54 @@
 <p><button id="goB">Restart</button>
 <button id="stopB">Halt</button></p>
 <p><textarea id="player1" rows="25" cols="16" spellcheck="false">
-jmp 3
-dat 0
-dat 99
-mov @-2, @-1
-sne -3, #9
 jmp 4
-add #1, -5
-add #1, -5
-jmp -5
-mov #99, 93
-jmp 93
+mov 2, -1
+jmp -1
+dat 9
+spl -2
+spl 4
+add #-16, -3
+mov -4, @-4
+jmp -4
+spl 2
+jmp -1
+mov 0 1
 </textarea>
 <textarea id="player2" rows="25" cols="16" spellcheck="false">
-add #4, 3
-mov 2, @2
-jmp -2
+jmp 2
 dat 0
+mov #12, -1
+mov @-2, <5
+djn -1, -3
+spl @3
+add #653, 2
+jmz -5, -6
+dat 833
 </textarea></p>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+//////////////////////////////////////////////////////////////////////////////
+Dwarf
+
+  add #4, 3
+  mov 2, @2
+  jmp -2
+  dat 0
+
+Gemini
+
+  jmp 3
+  dat 0
+  dat 99
+  mov @-2, @-1
+  sne -3, #9
+  jmp 4
+  add #1, -5
+  add #1, -5
+  jmp -5
+  mov #99, 93
+  jmp 93
+//////////////////////////////////////////////////////////////////////////////
 
 After installing Haste, run:
 
@@ -56,25 +86,39 @@ data Game = Game Core [(Int, [Int])] deriving Show
 
 sz = 8000
 
+inskvs = foldl' (\c (k, v) -> M.insert k v c)
+
 initCore = M.fromList $ zip [0..sz - 1] $ repeat $ Op "DAT" ('#', 0) ('#', 0)
 
-exe c ip = f op ma mb where
+exe c ip = (preb ++ prea ++ deltas, ip1) where
+  Op _ (ma, a) (mb, b) = c!ip
+  preb | mb == '<' = [(rb, putB (sub (getB $ c!rb) 1) $ c!rb)]
+       | otherwise = []
+  cb = inskvs c preb
+  rb = resolve c ip ('$', b)
+  prea | ma == '<' = [(ra, putB (sub (getB $ cb!ra) 1) $ cb!ra)]
+       | otherwise = []
+  ca = inskvs cb prea
+  ra = resolve cb ip ('$', a)
+  (deltas, ip1) = exeRedcode ca ip
+
+exeRedcode c ip = f op ma mb where
   Op op (ma, a) (mb, b) = c!ip
   f "DAT" _   _ = ([], [])
-  f "NOP" _   _ = ([], adv ip)
-  f "MOV" '#' _ = ([(rb, putB aa ib)], adv ip)
-  f "MOV" _ '#' = ([(rb, putB ba ib)], adv ip)
-  f "MOV" _   _ = ([(rb, c!ra)], adv ip)
+  f "NOP" _   _ = ([], adv)
+  f "MOV" '#' _ = ([(rb, putB aa ib)], adv)
+  f "MOV" _ '#' = ([(rb, putB ba ib)], adv)
+  f "MOV" _   _ = ([(rb, c!ra)], adv)
   f "SEQ" '#' _ = skipIf $ aa == bb
   f "SEQ" _ '#' = skipIf $ ba == bb
   f "SEQ" _   _ = skipIf $ ia == ib
   f "SNE" '#' _ = skipIf $ aa /= bb
   f "SNE" _ '#' = skipIf $ ba /= bb
   f "SNE" _   _ = skipIf $ ia /= ib
-  f "ADD" '#' _ = ([(rb, putB (add a $ bb) ib)], adv ip)
-  f "ADD" _ '#' = ([(rb, putB (add ba $ bb) ib)], adv ip)
-  f "ADD" _   _ = ([(rb, putA (add aa $ ab) $ putB (add ba $ bb) ib)], adv ip)
-  f "SPL" _   _ = ([], ra:adv ip)
+  f "ADD" '#' _ = ([(rb, putB (add a $ bb) ib)], adv)
+  f "ADD" _ '#' = ([(rb, putB (add ba $ bb) ib)], adv)
+  f "ADD" _   _ = ([(rb, putA (add aa $ ab) $ putB (add ba $ bb) ib)], adv)
+  f "SPL" _   _ = ([], adv ++ [ra])
   f "JMP" _   _ = jumpIf True      ra
   f "JMN" _   _ = jumpIf (bb /= 0) ra
   f "JMZ" _   _ = jumpIf (bb == 0) ra
@@ -82,9 +126,9 @@ exe c ip = f op ma mb where
   f "DJZ" _   _ = effect [(rb, putB (sub bb 1) ib)] $ jumpIf (bb == 1) ra
   f op _ _ = error $ "huh " ++ op
   jumpIf True  a = ([], [a])
-  jumpIf False _ = ([], adv ip)
-  skipIf True  = ([], map (add 1) $ adv ip)
-  skipIf False = ([], adv ip)
+  jumpIf False _ = ([], adv)
+  skipIf True  = ([], map (add 1) $ adv)
+  skipIf False = ([], adv)
   effect es (ds, a) = (ds ++ es, a)
   ra = resolve c ip (ma, a)
   rb = resolve c ip (mb, b)
@@ -94,10 +138,12 @@ exe c ip = f op ma mb where
   ba = getB ia
   ab = getA ib
   bb = getB ib
+  adv = [add ip 1]
 
 resolve c ip ('#', i) = ip
 resolve c ip ('$', i) = add ip i
 resolve c ip ('@', i) = let j = add ip i in add j $ getB $ c!j
+resolve c ip ('<', i) = resolve c ip ('@', i)
 
 getA (Op _ (_, a) _) = a
 getB (Op _ _ (_, b)) = b
@@ -107,8 +153,6 @@ putB b (Op op ma (m, _)) = Op op ma (m, b)
 add x y = (x + y) `mod` sz
 sub x y = (x + sz - y) `mod` sz
 
-adv ip = [add ip 1]
-
 num :: Parser Int
 num = do
   s <- option id $ const negate <$> char '-'
@@ -116,7 +160,7 @@ num = do
 
 arg = do
   spaces
-  m <- option '$' $ oneOf "@#$"
+  m <- option '$' $ oneOf "@#$<"
   n <- num
   return (m, standardize n)
 
@@ -124,8 +168,9 @@ standardize n | m < 0     = sz - m
               | otherwise = m
               where m = mod n sz
 
-known = flip S.member $ S.fromList $ words "MOV ADD SUB JMP JMZ JMN DJZ DJN SEQ SNE DAT SPL"
-isJump = flip S.member $ S.fromList $ words "JMP JMZ JMN DJZ DJN SPL"
+jumps = words "JMP JMZ JMN DJZ DJN SPL"
+known = flip S.member $ S.fromList $ words "MOV ADD SUB SEQ SNE DAT " ++ jumps
+isJump = flip S.member $ S.fromList jumps
 
 unalias "CMP" = "SNE"
 unalias "JMG" = "JMN"
@@ -146,7 +191,7 @@ asm = do
         else if op == "DAT"  then return $ Op op ('#', 0) a
         else fail $ "needs 2 args: " ++ op
 
-load ops a c = foldl' f c $ zip [a..] ops where f c (k, v) = M.insert k v c
+load ops a c = inskvs c $ zip [a..] ops
 
 passive = [RGB 191 63 63, RGB 63 63 191]
 active = [RGB 255 127 127, RGB 127 127 255]
@@ -175,14 +220,14 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
     step g@(Game c ((id, ip:rest):players)) = do
       let
         (deltas, next) = exe c ip
-        ipq = take 8000 $ rest ++ next
-        ins c (k, v) = M.insert k v c
-        c1 = foldl' ins c deltas
-      mark (passive!!id) ip
+        truncNext = take (8000 - length rest) $ next
+        ipq = rest ++ truncNext
+        c1 = inskvs c deltas
       mapM (mark (passive!!id) . fst) deltas
+      mark (passive!!id) ip
+      mapM (mark (active!!id)) truncNext
       case ipq of
         (h:_) -> do
-          mark (active!!id) $ head ipq
           putMVar gv $ Just $ Game c1 $ players ++ [(id, ipq)]
         [] -> do
           v0 <- getProp conE "value"
@@ -223,7 +268,6 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
         setProp conE "value" $ v0 ++ "match halted\n"
       Nothing -> pure ()
     putMVar gv Nothing
-
 
   newMatch
   void $ setTimer (Repeat 16) tryStep
