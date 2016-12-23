@@ -1,5 +1,9 @@
 = Core War =
 
+In a round of https://en.wikipedia.org/wiki/Core_War[Core War], two
+programs attempt to halt each other by overwriting instructions that are
+about to be executed. Watch a battle between two famous warriors,
+CHANG1 (left, blue) versus MICE (right, red):
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script src="redcode.js"></script>
@@ -8,7 +12,7 @@
 <p><textarea id="con" rows="5" cols="80" readonly></textarea></p>
 <p><button id="goB">Restart</button>
 <button id="stopB">Halt</button></p>
-<p><textarea id="player1" rows="25" cols="16" spellcheck="false">
+<p><textarea id="player1" rows="20" cols="16" spellcheck="false">
 jmp 4
 mov 2, -1
 jmp -1
@@ -22,7 +26,7 @@ spl 2
 jmp -1
 mov 0 1
 </textarea>
-<textarea id="player2" rows="25" cols="16" spellcheck="false">
+<textarea id="player2" rows="20" cols="16" spellcheck="false">
 jmp 2
 dat 0
 mov #12, -1
@@ -58,49 +62,102 @@ Gemini
   jmp 93
 //////////////////////////////////////////////////////////////////////////////
 
-After installing Haste, run:
+The programs are written in a language called Redcode. For details, read the
+original http://www.koth.org/info/akdewdney/['Scientific American' articles]
+introducing the game, as well as
+http://vyznev.net/corewar/guide.html[a guide to the 1994 revision of Redcode],
+which is nicer than http://corewar.co.uk/standards/icws94.htm[the official document]. See also
+http://www.koth.org/planar/by-name/complete.htm[complete listings of many
+programs].
+
+Some potential points of confusion:
+
+ - In the original Redcode, MOV with an immediate A field writes a DAT
+   instruction to the target address. In later versions, it overwrites the B
+   field only by default.
+ - The instruction encoding scheme given in the original article is irrelevant.
+   For example, the only way to change an instruction is to use MOV to copy
+   another instruction,
+ - The '94 specification defines CMP to be an alias of SEQ, but
+   http://www.koth.org/info/akdewdney/images/Gemini.jpg[the Gemini program
+   featured in the original article], it clearly means SNE.
+ - In general, documentation felt buggy. For example, I happened to
+   browse http://www.koth.org/planar/rc/theMystery1.5.txt[the source of
+   theMystery 1.5], which claims "spl 1; mov -1, 0; mov -1, 0" makes 7
+   processes. It seems it results in 5 processes. To get 7, we could write
+   "spl 1; spl 1; mov -1, 0".
+
+== The Journey to MARS ==
+
+The above Memory Array Redcode Simulator was written in Haskell and
+compiled to JavaScript with http://haste-lang.org/[Haste].
+
+To build this webpage, install http://haste-lang.org/[Haste] and
+http://asciidoc.org/[AsciiDoc], then run:
 
 ------------------------------------------------------------------------------
-haste-cabal install parsec
+$ haste-cabal install parsec
+$ wget http://cs.stanford.edu/~blynn/haskell/redcode.lhs
+$ hastec redcode.lhs
+$ sed 's/^\\.*{code}$/-----/' redcode.lhs | asciidoc -o - - > redcode.html
 ------------------------------------------------------------------------------
+
+We start with imports for our Redcode emulator:
 
 \begin{code}
+{-# LANGUAGE ViewPatterns #-}
 import Control.Concurrent.MVar
 import Control.Monad
 import Data.Char
+import Data.Sequence (Seq, viewl, ViewL(..), (><))
+import qualified Data.Sequence as Seq
 import Data.List
 import Data.Map.Strict (Map, (!))
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Text.ParserCombinators.Parsec
+\end{code}
 
+Then append some Haste-specific imports:
+
+\begin{code}
 import Haste
 import Haste.DOM
 import Haste.Events
 import Haste.Graphics.Canvas
+\end{code}
 
+We use `Data.Map` to represent the memory array of 8000 cells, initialized to
+`DAT 0` instructions. Arrays are cumbersome in
+Haskell because of purity. The game state consists of the memory array,
+along with a tuple holding a program ID along with the program counters of
+its threads. For the latter, we use `Data.Sequence` instead of a list
+because we want queue operations to be fast and strict.
+
+\begin{code}
 type Arg = (Char, Int)
 data Op = Op String Arg Arg deriving (Show, Eq)
 type Core = Map Int Op
-data Game = Game Core [(Int, [Int])] deriving Show
+data Game = Game Core [(Int, Seq Int)] deriving Show
 
 sz = 8000
 
+initCore = M.fromList $ zip [0..sz - 1] $ repeat $ Op "DAT" ('#', 0) ('#', 0)
+\end{code}
+
+Simulating a single instruction at a given location results list of changes to
+be made to memory, and a list of the next locations to execute.
+
+Recording the changes makes it easy to update our visualization of memory. If
+we simply returned a new map, we may have to redraw the entire screen to show
+the next state.
+
+I began with the three original memory addressing modes:
+
+\begin{code}
 inskvs = foldl' (\c (k, v) -> M.insert k v c)
 
-initCore = M.fromList $ zip [0..sz - 1] $ repeat $ Op "DAT" ('#', 0) ('#', 0)
-
-exe c ip = (preb ++ prea ++ deltas, ip1) where
-  Op _ (ma, a) (mb, b) = c!ip
-  preb | mb == '<' = [(rb, putB (sub (getB $ c!rb) 1) $ c!rb)]
-       | otherwise = []
-  cb = inskvs c preb
-  rb = resolve c ip ('$', b)
-  prea | ma == '<' = [(ra, putB (sub (getB $ cb!ra) 1) $ cb!ra)]
-       | otherwise = []
-  ca = inskvs cb prea
-  ra = resolve cb ip ('$', a)
-  (deltas, ip1) = exeRedcode ca ip
+load ops a c = inskvs c $ zip [a..] ops
 
 exeRedcode c ip = f op ma mb where
   Op op (ma, a) (mb, b) = c!ip
@@ -140,11 +197,6 @@ exeRedcode c ip = f op ma mb where
   bb = getB ib
   adv = [add ip 1]
 
-resolve c ip ('#', i) = ip
-resolve c ip ('$', i) = add ip i
-resolve c ip ('@', i) = let j = add ip i in add j $ getB $ c!j
-resolve c ip ('<', i) = resolve c ip ('@', i)
-
 getA (Op _ (_, a) _) = a
 getB (Op _ _ (_, b)) = b
 putA a (Op op (m, _) mb) = Op op (m, a) mb
@@ -153,6 +205,34 @@ putB b (Op op ma (m, _)) = Op op ma (m, b)
 add x y = (x + y) `mod` sz
 sub x y = (x + sz - y) `mod` sz
 
+resolve c ip ('#', i) = ip
+resolve c ip ('$', i) = add ip i
+resolve c ip ('@', i) = let j = add ip i in add j $ getB $ c!j
+\end{code}
+
+Later I learned of newer addressing modes that predecrement or postincrement.
+I hastily added a wrapper function to handle the case needed for the MICE
+program:
+
+\begin{code}
+resolve c ip ('<', i) = resolve c ip ('@', i)
+
+exe c ip = (preb ++ prea ++ deltas, ip1) where
+  Op _ (ma, a) (mb, b) = c!ip
+  preb | mb == '<' = [(rb, putB (sub (getB $ c!rb) 1) $ c!rb)]
+       | otherwise = []
+  cb = inskvs c preb
+  rb = resolve c ip ('$', b)
+  prea | ma == '<' = [(ra, putB (sub (getB $ cb!ra) 1) $ cb!ra)]
+       | otherwise = []
+  ca = inskvs cb prea
+  ra = resolve cb ip ('$', a)
+  (deltas, ip1) = exeRedcode ca ip
+\end{code}
+
+Let's move on to the assembler. We use the Parsec parser combinator library:
+
+\begin{code}
 num :: Parser Int
 num = do
   s <- option id $ const negate <$> char '-'
@@ -190,11 +270,25 @@ asm = do
       Nothing -> if isJump op then return $ Op op a ('#', 0)
         else if op == "DAT"  then return $ Op op ('#', 0) a
         else fail $ "needs 2 args: " ++ op
+\end{code}
 
-load ops a c = inskvs c $ zip [a..] ops
+Lastly, we build a GUI. We have a timer that fires every 16 milliseconds, which
+causes our program to advance the game held in an MVar by 64 steps. Each of the
+two warriors is limited to 32 processes.
 
-passive = [RGB 191 63 63, RGB 63 63 191]
-active = [RGB 255 127 127, RGB 127 127 255]
+I tried using a once-only timer that would set up the next once-only timer,
+which would then be canceled if the simulation were halted, but I couldn't
+get `stopTimer` to work.
+
+We use an `MVar` to store the game state between ticks. An `IORef` would work
+too, since JavaScript is single-threaded.
+
+I spent little effort on this part. The code here is tightly coupled to Haste
+and HTML: rewriting it for, say, SDL or GHCJS would require big changes anyway.
+
+\begin{code}
+passive = [RGB 63 63 191, RGB 191 63 63]
+active = [RGB 127 127 255, RGB 255 127 127]
 
 main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
      \[canvasE, player1E, player2E, conE, goB, stopB] -> do
@@ -211,42 +305,41 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
       case jg of
         Just g -> step g
         Nothing -> putMVar gv Nothing
-
-    step g@(Game c []) = do
-      putMVar gv $ Nothing
+    con s = do
       v0 <- getProp conE "value"
-      setProp conE "value" $ v0 ++ "all programs halted\n"
+      setProp conE "value" $ v0 ++ s ++ "\n"
 
-    step g@(Game c ((id, ip:rest):players)) = do
+    step g@(Game c []) = putMVar gv Nothing >> con "all programs halted"
+
+    step g@(Game c ((id, viewl -> ip :< rest):players)) = do
       let
         (deltas, next) = exe c ip
-        truncNext = take (8000 - length rest) $ next
-        ipq = rest ++ truncNext
+        truncNext = take (32 - Seq.length rest) $ next
+        ipq = rest >< Seq.fromList truncNext
         c1 = inskvs c deltas
       mapM (mark (passive!!id) . fst) deltas
       mark (passive!!id) ip
       mapM (mark (active!!id)) truncNext
-      case ipq of
-        (h:_) -> do
-          putMVar gv $ Just $ Game c1 $ players ++ [(id, ipq)]
-        [] -> do
-          v0 <- getProp conE "value"
-          setProp conE "value" $ v0 ++ "program " ++ show id ++ " halted\n"
+      case viewl ipq of
+        EmptyL -> do
+          con $ "program " ++ show id ++ " halted"
           putMVar gv $ Just $ Game c1 players
+        _ -> putMVar gv $ Just $ Game c1 $ players ++ [(id, ipq)]
 
     newMatch = do
       render canvas $ color (RGB 0 0 0) $ fill $ rect (0, 0) (300, 240)
+      setProp conE "value" $ "new match: 0 vs 1\n"
       s <- getProp player1E "value"
       case mapM (parse asm "") $ lines s of
         Left err -> do
           swapMVar gv Nothing
-          setProp conE "value" $ show err
+          con $ show err
         Right p1 -> do
           s <- getProp player2E "value"
           case mapM (parse asm "") $ lines s of
             Left err -> do
               swapMVar gv Nothing
-              setProp conE "value" $ show err
+              con $ show err
             Right p2 -> gameOn p1 p2
 
     gameOn p1 p2 = do
@@ -254,22 +347,19 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
       mark (active!!0) 0
       mapM_ (mark $ passive!!1) [4000..4000 + length p2 - 1]
       mark (active!!1) 4000
-      void $ swapMVar gv $ Just $ Game
-        (load p2 4000 $ load p1 0 initCore) [(0, [0]), (1, [4000])]
-      setProp conE "value" $ "running programs: 0 vs 1\n"
+      void $ swapMVar gv $ Just $ Game (load p2 4000 $ load p1 0 initCore)
+        [(0, Seq.singleton 0), (1, Seq.singleton 4000)]
+      con $ "running programs"
 
   void $ goB `onEvent` Click $ \_ -> newMatch
 
   void $ stopB `onEvent` Click $ \_ -> do
     jg <- takeMVar gv
     case jg of
-      Just _ -> do
-        v0 <- getProp conE "value"
-        setProp conE "value" $ v0 ++ "match halted\n"
+      Just _ -> con "match halted"
       Nothing -> pure ()
     putMVar gv Nothing
 
   newMatch
-  void $ setTimer (Repeat 16) tryStep
-
+  void $ setTimer (Repeat 16) $ replicateM_ 64 tryStep
 \end{code}
