@@ -127,12 +127,12 @@ import Haste.Events
 import Haste.Graphics.Canvas
 \end{code}
 
-We use `Data.Map` to represent the memory array of 8000 cells, initialized to
-`DAT 0` instructions. Arrays are cumbersome in
-Haskell because of purity. The game state consists of the memory array,
-along with a tuple holding a program ID along with the program counters of
-its threads. For the latter, we use `Data.Sequence` instead of a list
-because we want queue operations to be fast and strict.
+Arrays are cumbersome in Haskell because of purity, so we use `Data.Map` to
+represent the memory array of 8000 cells, initialized to `DAT 0` instructions.
+The game state consists of the memory array, along with a tuple holding a
+program ID along with the program counters of its threads. For the latter, we
+use `Data.Sequence` instead of a list to obtain fast and strict  queue
+operations.
 
 \begin{code}
 type Arg = (Char, Int)
@@ -145,12 +145,12 @@ sz = 8000
 initCore = M.fromList $ zip [0..sz - 1] $ repeat $ Op "DAT" ('#', 0) ('#', 0)
 \end{code}
 
-Simulating a single instruction at a given location results list of changes to
-be made to memory, and a list of the next locations to execute.
+Simulating a single instruction at a given location results in a list of
+changes to be made to memory, and a list of the next locations to execute.
 
-Recording the changes makes it easy to update our visualization of memory. If
-we simply returned a new map, we may have to redraw the entire screen to show
-the next state.
+Focusing on the changes makes it easy to update our visualization of memory. If
+we instead returned a new map, we might have to redraw the entire screen to
+show the next state.
 
 I began with the three original memory addressing modes:
 
@@ -230,6 +230,8 @@ exe c ip = (preb ++ prea ++ deltas, ip1) where
   (deltas, ip1) = exeRedcode ca ip
 \end{code}
 
+I had no motivation to add the other addressing modes.
+
 Let's move on to the assembler. We use the Parsec parser combinator library:
 
 \begin{code}
@@ -272,7 +274,7 @@ asm = do
         else fail $ "needs 2 args: " ++ op
 \end{code}
 
-Lastly, we build a GUI. We have a timer that fires every 16 milliseconds, which
+Lastly, we add a GUI. We have a timer that fires every 16 milliseconds, which
 causes our program to advance the game held in an MVar by 64 steps. Each of the
 two warriors is limited to 32 processes.
 
