@@ -172,9 +172,9 @@ exeRedcode c ip = f op ma mb where
   f "SNE" '#' _ = skipIf $ aa /= bb
   f "SNE" _ '#' = skipIf $ ba /= bb
   f "SNE" _   _ = skipIf $ ia /= ib
-  f "ADD" '#' _ = ([(rb, putB (add a $ bb) ib)], adv)
-  f "ADD" _ '#' = ([(rb, putB (add ba $ bb) ib)], adv)
-  f "ADD" _   _ = ([(rb, putA (add aa $ ab) $ putB (add ba $ bb) ib)], adv)
+  f "ADD" '#' _ = ([(rb, putB (add a  bb) ib)], adv)
+  f "ADD" _ '#' = ([(rb, putB (add ba bb) ib)], adv)
+  f "ADD" _   _ = ([(rb, putA (add aa ab) $ putB (add ba bb) ib)], adv)
   f "SPL" _   _ = ([], adv ++ [ra])
   f "JMP" _   _ = jumpIf True      ra
   f "JMN" _   _ = jumpIf (bb /= 0) ra
@@ -184,7 +184,7 @@ exeRedcode c ip = f op ma mb where
   f op _ _ = error $ "huh " ++ op
   jumpIf True  a = ([], [a])
   jumpIf False _ = ([], adv)
-  skipIf True  = ([], map (add 1) $ adv)
+  skipIf True  = ([], add 1 <$> adv)
   skipIf False = ([], adv)
   effect es (ds, a) = (ds ++ es, a)
   ra = resolve c ip (ma, a)
@@ -269,9 +269,9 @@ asm = do
     eof
     case m of
       Just b -> return $ Op op a b
-      Nothing -> if isJump op then return $ Op op a ('#', 0)
-        else if op == "DAT"  then return $ Op op ('#', 0) a
-        else fail $ "needs 2 args: " ++ op
+      Nothing | isJump op   -> return $ Op op a ('#', 0)
+              | op == "DAT" -> return $ Op op ('#', 0) a
+              | otherwise   -> fail $ "needs 2 args: " ++ op
 \end{code}
 
 Lastly, we add a GUI. We have a timer that fires every 16 milliseconds, which
@@ -316,12 +316,12 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
     step g@(Game c ((id, viewl -> ip :< rest):players)) = do
       let
         (deltas, next) = exe c ip
-        truncNext = take (32 - Seq.length rest) $ next
+        truncNext = take (32 - Seq.length rest) next
         ipq = rest >< Seq.fromList truncNext
         c1 = inskvs c deltas
-      mapM (mark (passive!!id) . fst) deltas
+      mapM_ (mark (passive!!id) . fst) deltas
       mark (passive!!id) ip
-      mapM (mark (active!!id)) truncNext
+      mapM_ (mark (active!!id)) truncNext
       case viewl ipq of
         EmptyL -> do
           con $ "program " ++ show id ++ " halted"
@@ -330,7 +330,7 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
 
     newMatch = do
       render canvas $ color (RGB 0 0 0) $ fill $ rect (0, 0) (300, 240)
-      setProp conE "value" $ "new match: 0 vs 1\n"
+      setProp conE "value" "new match: 0 vs 1\n"
       s <- getProp player1E "value"
       case mapM (parse asm "") $ lines s of
         Left err -> do
@@ -351,9 +351,9 @@ main = withElems ["canvas", "player1", "player2", "con", "goB", "stopB"] $
       mark (active!!1) 4000
       void $ swapMVar gv $ Just $ Game (load p2 4000 $ load p1 0 initCore)
         [(0, Seq.singleton 0), (1, Seq.singleton 4000)]
-      con $ "running programs"
+      con "running programs"
 
-  void $ goB `onEvent` Click $ \_ -> newMatch
+  void $ goB `onEvent` Click $ const newMatch
 
   void $ stopB `onEvent` Click $ \_ -> do
     jg <- takeMVar gv
