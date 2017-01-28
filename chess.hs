@@ -1,10 +1,14 @@
+-- This stopped working after I upgraded Haste from 0.4 to 0.5.
+-- Until I figure out why, I'm using the JavaScript compiled by the older Haste.
 import Control.Monad
 import Data.Array
 import Data.List
 import Data.Maybe
 import Data.Tree
 import Haste
+import Haste.DOM
 import qualified Haste.Concurrent as H
+import Haste.Events
 import Haste.Graphics.Canvas
 
 bnds = ((0,0), (7,7)); sz = 40
@@ -14,7 +18,7 @@ onBoard = inRange bnds
 data Piece = Pawn | Knight | Bishop | Rook | Queen | King deriving (Eq, Show)
 data Side = White | Black deriving (Eq, Show)
 data Square = Square Side Piece deriving (Eq, Show)
-data Event = KeyDown Int | Click Int Int
+data Event = EKeyDown Int | EClick Int Int
 data State = Draw | Won | Play deriving Eq
 data Game = Game { board :: Array (Int, Int) (Maybe Square)
                  , state :: State
@@ -172,26 +176,26 @@ move game m = let game1 = movePrecheck game m in
     game1
 
 main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, promoSel] -> do
-  Just canvas <- getCanvas canvasE
-  Just whitePiece <- createCanvas sz sz
+  Just canvas <- fromElem canvasE
+  whitePiece <- createCanvas sz sz
   renderOnTop whitePiece $ color (RGB 255 255 255) $ fill $ circle (20, 20) 10
   renderOnTop whitePiece $ color (RGB 0 0 0) $ stroke $ circle (20, 20) 11
-  Just blackPiece <- createCanvas sz sz
+  blackPiece <- createCanvas sz sz
   renderOnTop blackPiece $ color (RGB 0 0 0) $ fill $ circle (20, 20) 11
 
-  Just fromCan <- createCanvas sz sz
+  fromCan <- createCanvas sz sz
   render fromCan $ color (RGB 127 15 15) $ sequence_
     [ box 0 0 5 40, box 0 0 40 5, box 35 0 40 40, box 0 35 40 40 ]
-  Just toCan <- createCanvas sz sz
+  toCan <- createCanvas sz sz
   render toCan $ color (RGBA 0 191 0 0.3) $ box 0 0 sz sz
 
-  Just boardCan <- createCanvas 320 320
+  boardCan <- createCanvas 320 320
   sequence_ $ [renderOnTop boardCan $ color (sqColor (mod (x + y) 2 == 0)) $ box (x*sz) (y*sz) sz sz | (x, y) <- range bnds]
-  Just buf <- createCanvas 320 320
+  buf <- createCanvas 320 320
 
   ev <- H.newEmptyMVar
-  canvasE  `onEvent` OnMouseDown $ \_button (x, y) -> H.concurrent $ H.putMVar ev $ Click x y
-  body `onEvent` OnKeyDown $ \k -> H.concurrent $ H.putMVar ev $ KeyDown k
+  canvasE  `onEvent` MouseDown $ \(MouseData (x, y) _ _) -> H.concurrent $ H.putMVar ev $ EClick x y
+  body `onEvent` KeyDown $ \k -> H.concurrent $ H.putMVar ev $ EKeyDown $ keyCode k
 
   seed <- newSeed
   seedV <- H.newMVar seed
@@ -224,7 +228,7 @@ main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, 
     loop game = let b = board game in if anim game == Nothing then do
       e <- H.takeMVar ev
       case e of
-        Click bx by -> when (state game == Play) $ let
+        EClick bx by -> when (state game == Play) $ let
           sel0 = selection game
           i@(x, y) = (div bx sz, div by sz)
           sel = if b!i /= Nothing && side (b!i) == player game then Just i else Nothing
@@ -242,7 +246,7 @@ main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, 
             else
               loop game { selection = Nothing }
 
-        KeyDown 113 -> do
+        EKeyDown 113 -> do
           drawGame initGame
           loop initGame
 
@@ -253,16 +257,16 @@ main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, 
           drawGame game1
           -- Delay so canvas has a chance to update.
           if state game1 == Play && player game1 == Black then
-            setTimeout 20 $ H.concurrent $ do
-            ms <- shuffleIO $ legalMoves game1
-            loop game1 { anim = Just (0, best game1 ms) }
+            void $ setTimer (Once 20) $ do
+              ms <- shuffleIO $ legalMoves game1
+              loop game1 { anim = Just (0, best game1 ms) }
           else
             loop game1
 
         else let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
           drawGame game { board = b // [(from, Nothing)] }
           renderPiece canvas (b!from) (f x0 x1 frame, f y0 y1 frame)
-          setTimeout 20 $ H.concurrent $ loop game { anim = Just (frame + 1, m) }
+          void $ setTimer (Once 20) $ loop game { anim = Just (frame + 1, m) }
 
     game = initGame in do
       drawGame game

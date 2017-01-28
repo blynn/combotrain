@@ -1,0 +1,11 @@
+= Now Playing =
+
+http://benlynn.blogspot.com/2014/07/15-shades-of-grey_29.html[Inspired by a
+talk by John Carmack]
+[http://benlynn.blogspot.com/2014/08/let-code.html[follow-up post]], I wrote
+these browser games in Haskell. I used the http://haste-lang.org/[Haste
+compiler] to solve https://wiki.haskell.org/The_JavaScript_Problem[the
+JavaScript problem].
+
+I chose Haste because https://github.com/ghcjs/ghcjs[GHCJS] seemed tough to
+install at the time.
