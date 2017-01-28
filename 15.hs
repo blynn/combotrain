@@ -1,6 +1,5 @@
 import System.Random.Shuffle
 import Control.Monad
-import Data.Ix
 import Data.Array
 import Graphics.UI.SDL as SDL
 import Graphics.UI.SDL.Color

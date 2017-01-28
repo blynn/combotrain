@@ -1,10 +1,21 @@
 = 15 Shades of Grey =
 
 Haskell implementations of the 15-puzzle, with grey squares instead of numbers.
-Use arrow keys or the mouse to slide them so they appear from brightest to
-darkest going left to right, top to bottom.
 
 One program uses https://www.libsdl.org/[the SDL library], and the other uses
 http://haste-lang.org/[the Haste compiler] to produce JavaScript.
 
-https://crypto.stanford.edu/~blynn/15[Play now!]
+The Makefile only works for me. Build the JavaScript version with:
+
+------------------------------------------------------------------------------
+$ hastec 15.lhs
+$ sed 's/^\\.*{code}$/-----/' 15.lhs | asciidoc -o - - > 15.html
+------------------------------------------------------------------------------
+
+and the SDL version with:
+
+------------------------------------------------------------------------------
+$ ghc 15.lhs
+------------------------------------------------------------------------------
+
+https://crypto.stanford.edu/~blynn/play/15.html[Play now!]

@@ -1,4 +1,5 @@
-all : 15 js.js
+all : 15 15.js 15.html
 15 : 15.hs ; ghc $^
-js.js : js.hs ; hastec $^
-sync: js.js; scp $^ blynn@xenon.stanford.edu:www/15/
+15.js : 15.lhs ; hastec $^
+15.html : ../play/menu 15.lhs ; cobble mathbook $^
+sync: 15.lhs 15.js 15.html; scp $^ crypto.stanford.edu:www/play/
