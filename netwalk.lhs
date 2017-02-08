@@ -1,3 +1,18 @@
+= NetWalk =
+
+Connect all terminals to the server.
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script src="netwalk.js"></script>
+<canvas id="canvas" style="border:1px solid black; display:block;margin:auto;"
+  width="320" height="288"></canvas>
+</div>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Source:
+
+\begin{code}
 import Control.Concurrent.MVar
 import Control.Monad
 import Data.Array
@@ -98,11 +113,13 @@ paint pic = do
 
 data Event = Mo (Int, Int) | Ke Int
 
-main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
+main = withElems ["canvas"] $ \[canvasE] -> do
   evq <- newMVar [Ke 113]
   canvasE `onEvent` MouseDown $
-    \m -> modifyMVar_ evq $ pure . (++ [Mo $ mouseCoords m])
-  body `onEvent` KeyDown $
+    \m -> do
+       modifyMVar_ evq $ pure . (++ [Mo $ mouseCoords m])
+       preventDefault
+  documentBody `onEvent` KeyDown $
     \k -> modifyMVar_ evq $ pure . (++ [Ke $ keyCode k])
   Just canvas <- fromElem canvasE
   [grid, buf] <- let (x, y) = snd bnds in
@@ -137,7 +154,6 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
             sequence_ [drawTile (live!i) (board!i) | i <- range bnds]
             renderOnTop buf $ let (x,y) = srcTop in
               rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
-            setProp msg "innerHTML" (if state == Won then "Solved" else "")
           render canvas $ draw buf (0, 0)
           game2 <- if state == Won then do
             sequence_ [renderOnTop canvas $ drawB packet
@@ -147,3 +163,4 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
           else return game1
           void $ setTimer (Once 20) $ loop game2
     in loop $ Game undefined undefined undefined (randomRs (0, 2^20 :: Int) seed) undefined
+\end{code}

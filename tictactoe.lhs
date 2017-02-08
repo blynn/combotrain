@@ -1,3 +1,19 @@
+= Tic-tac-toe =
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script src="tictactoe.js"></script>
+<canvas id="canvas" style="border:1px solid black;display:block;margin:auto;" width="192" height="192"></canvas>
+<div style="text-align:center;">
+<div id="message"></div>
+<input type="checkbox" id="noab">Disable
+<a
+href="http://en.wikipedia.org/wiki/Alpha%E2%80%93beta_pruning">alpha-beta
+pruning</a>.
+</div>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+\begin{code}
 import Data.Array
 import Data.Bool
 import Data.IORef
@@ -67,8 +83,7 @@ f = fromIntegral
 
 oblong x y w h = fill $ rect (f x, f y) (f $ x + w, f $ y + h)
 
-main = withElems ["body", "canvas", "message", "noab"] $
-                \[body, cElem, message, noab] -> do
+main = withElems ["canvas", "message", "noab"] $ \[cElem, message, noab] -> do
   xo <- loadBitmap "xo.png"
   Just canvas <- fromElem cElem
   seedVar <- newSeed >>= newIORef
@@ -116,6 +131,7 @@ main = withElems ["body", "canvas", "message", "noab"] $
     let i = (x `div` sz, y `div` sz) in when (status == Play && player == -1
        && inRange bnds i && board!i == 0) $ go $ move board player i
 
-  _ <- body `onEvent` KeyDown $ \k -> when (keyCode k == 113) $ go initGame
+  _ <- documentBody `onEvent` KeyDown $ \k -> when (keyCode k == 113) $ go initGame
 
   update
+\end{code}

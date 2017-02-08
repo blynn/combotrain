@@ -13,7 +13,7 @@ menu.html: menu ; cobble menu menu
 %.html : %.lhs menu.html ; cobble mathbook menu $<
 
 all: $(SITEFILES)
-%.js : %.hs ; $(HS2JS) $^
+%.js : %.lhs ; $(HS2JS) $^
 
 # See comments in chess.hs.
 chess.js : oldchess.js ; cp $^ $@

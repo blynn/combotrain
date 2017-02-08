@@ -1,3 +1,16 @@
+= Breakthrough =
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script src="breakthrough.js"></script>
+<canvas id="canvas" style="border:1px solid black;display:block;margin:auto;" width="320" height="320"></canvas>
+<div style="text-align:center" id="message">
+</div>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Breakthrough was invented by Dan Troyka [http://en.wikipedia.org/wiki/Breakthrough_(board_game)[Rules]].
+
+\begin{code}
 import Control.Monad
 import Data.Array
 import Data.Maybe
@@ -84,7 +97,7 @@ move game (i0, i1@(_, y1)) = let
   nextState = if (p == 1 && y1 == 0) || (p == -1 && y1 == 7) then Won else Play
   in Game nextBoard nextState (if nextState == Won then p else -p) Nothing Nothing (i0, i1)
 
-main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
+main = withElems ["canvas", "message"] $ \[canvasE, msg] -> do
   Just canvas <- fromElem canvasE
   whitePiece <- createCanvas sz sz
   renderOnTop whitePiece $ color (RGB 255 255 255) $ fill $ circle (20, 20) 10
@@ -104,7 +117,7 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
 
   ev <- newEmptyMVar
   canvasE  `onEvent` MouseDown $ \m -> concurrent $ putMVar ev $ Mo $ mouseCoords m
-  body `onEvent` KeyDown $ \k -> concurrent $ putMVar ev $ Ke $ keyCode k
+  documentBody `onEvent` KeyDown $ \k -> concurrent $ putMVar ev $ Ke $ keyCode k
 
   seed <- newSeed
   seedV <- newMVar seed
@@ -156,8 +169,8 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
     else let Just (frame, m@((x0, y0), (x1, y1))) = anim game in
       if frame == 8 then let game1 = move game m in do
         drawGame game1
-        if state game1 == Play && player game1 == -1 then
-          void $ setTimer (Once 1) $ do  -- Delay for redraw.
+        if state game1 == Play && player game1 == -1 then do
+          wait 1  -- Delay for redraw.
           ms <- shuffleIO $ nextMoves game1
           loop game1 { anim = Just (0, best game1 ms) }
         else
@@ -168,3 +181,4 @@ main = withElems ["body", "canvas", "message"] $ \[body, canvasE, msg] -> do
         void $ setTimer (Once 20) $ loop game { anim = Just (frame + 1, m) }
 
   concurrent $ forkIO $ drawGame initGame >> loop initGame
+\end{code}

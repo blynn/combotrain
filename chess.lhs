@@ -1,5 +1,30 @@
--- This stopped working after I upgraded Haste from 0.4 to 0.5.
--- Until I figure out why, I'm using the JavaScript compiled by the older Haste.
+= Chess =
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<div id="body">
+<script src="chess.js"></script>
+<canvas id="canvas" style="border:1px solid black;display:block;margin:auto;" width="320" height="320"></canvas>
+<div style="text-align:center;">
+<div id="message">
+</div>
+<p>
+Promote your next pawn to:
+<select id="promo">
+  <option value="Queen">Queen</option>
+  <option value="Rook">Rook</option>
+  <option value="Bishop">Bishop</option>
+  <option value="Knight">Knight</option>
+</select>
+</p>
+</div>
+</div>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+My code stopped working after I upgraded Haste from 0.4 to 0.5. Until I figure
+out why, the above uses the JavaScript compiled by the older Haste.
+
+\begin{code}
 import Control.Monad
 import Data.Array
 import Data.List
@@ -175,7 +200,7 @@ move game m = let game1 = movePrecheck game m in
   else
     game1
 
-main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, promoSel] -> do
+main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> do
   Just canvas <- fromElem canvasE
   whitePiece <- createCanvas sz sz
   renderOnTop whitePiece $ color (RGB 255 255 255) $ fill $ circle (20, 20) 10
@@ -195,7 +220,7 @@ main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, 
 
   ev <- H.newEmptyMVar
   canvasE  `onEvent` MouseDown $ \(MouseData (x, y) _ _) -> H.concurrent $ H.putMVar ev $ EClick x y
-  body `onEvent` KeyDown $ \k -> H.concurrent $ H.putMVar ev $ EKeyDown $ keyCode k
+  documentBody `onEvent` KeyDown $ \k -> H.concurrent $ H.putMVar ev $ EKeyDown $ keyCode k
 
   seed <- newSeed
   seedV <- H.newMVar seed
@@ -271,3 +296,4 @@ main = withElems ["body", "canvas", "message", "promo"] $ \[body, canvasE, msg, 
     game = initGame in do
       drawGame game
       H.concurrent $ H.forkIO $ loop game
+\end{code}

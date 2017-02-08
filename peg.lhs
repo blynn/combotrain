@@ -1,3 +1,13 @@
+= Peg Solitaire =
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script src="peg.js"></script>
+<canvas id="canvas" width="224" height="224" style="display:block;margin:auto;">
+</canvas>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+\begin{code}
 import Control.Monad
 import Data.Bool
 import Data.IORef
@@ -50,3 +60,4 @@ main = withElems ["canvas"] $ \[cElem] -> do
         | otherwise        = (st, Nothing)
     writeIORef ref f
     draw
+\end{code}
