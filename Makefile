@@ -1,15 +1,13 @@
 .PHONY: all sync push target
 target: all
 
-HSFILES=tictactoe netwalk breakthrough peg chess
+HSFILES=tictactoe netwalk breakthrough peg chess index
 
-SITEFILES=$(addsuffix .html, $(HSFILES)) $(addsuffix .js, $(HSFILES)) \
-  index.html xo.png
+SITEFILES=$(addsuffix .html, $(HSFILES)) $(addsuffix .js, $(HSFILES)) xo.png
 
 HS2JS=-mv Main.jsmod /tmp; hastec --opt-all
 
 menu.html: menu ; cobble menu menu
-%.html : %.txt menu.html ; cobble mathbook menu $<
 %.html : %.lhs menu.html ; cobble mathbook menu $<
 
 all: $(SITEFILES)
