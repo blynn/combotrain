@@ -6,9 +6,7 @@ right, top to bottom.
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script src="15.js"></script>
-<canvas id="canvas"
-  style="border:1px solid black;
-    display:block; margin-left:auto; margin-right:auto"
+<canvas id="canvas" style="border:1px solid black;display:block; margin:auto;"
   width="256" height="256"></canvas>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
