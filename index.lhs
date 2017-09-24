@@ -131,22 +131,6 @@ function termOpen() { term.open(); }
 <script type="text/javascript" src="index.js"></script>
 ------------------------------------------------------------------------------
 
-== Random Numbers ==
-
-We must make do without System.Random. Haste provides `randomR`, which is
-similar to `System.Random.randomR`, but it takes a `Seed` instead of a
-`RandomGen`. For example:
-
-------------------------------------------------------------------------------
-import Data.List
-import Haste
-
-main = newSeed >>=
-  writeLog . show . take 20 . unfoldr (Just . randomR (1, 6 :: Int))
-------------------------------------------------------------------------------
-
-As of 0.5.5, the docs lie: randomR range is inclusive on both ends.
-
 == Threads ==
 
 https://developer.mozilla.org/en/docs/Web/JavaScript/EventLoop[JavaScript is
@@ -210,5 +194,7 @@ On the contrary, by running `haste-cabal`, we can use many packages in our
 JavaScript programs:
 
 ------------------------------------------------------------------------------
+$ haste-cabal update
+$ haste-cabal install random
 $ haste-cabal install parsec
 ------------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import Control.Concurrent.MVar
 import Control.Monad
 import Data.Array
 import Data.List
+import System.Random
 import Haste
 import Haste.DOM
 import Haste.Events
@@ -58,17 +59,18 @@ scramble board rs = let
 scrambleSrc board r = iterate srcRot board !! (r `mod` 4)
 
 followLive game = f [srcBot] (listArray bnds $ repeat False) 0 where
-  f [] live n =
-    game { live = live, state = if n == rangeSize bnds then Won else Play }
-  f (i@(x, y):is) live n
-    | live!i = f is live n
-    | otherwise = f (is ++ js) (live // [(i, True)]) (n + 1)
+  f [] acc n =
+    game { live = acc, state = if n == rangeSize bnds then Won else Play }
+  f (i@(x, y):is) acc n
+    | acc!i = f is acc n
+    | otherwise = f (is ++ js) (acc // [(i, True)]) (n + 1)
     where
       board = Main.board game
       js = [j | (dx,dy) <- ways (board!i), let j = (x+dx, y+dy), inRange bnds j,
-        (-dx, -dy) `elem` ways (board!j), not (live!j)]
+        (-dx, -dy) `elem` ways (board!j), not (acc!j)]
 
 rot (Tile i w) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) w
+rot Blank      = Blank
 
 srcRot board = let
   Tile _ w = rot $ Tile (0, 0) $ delete (0, -1) (ways $ board!srcBot) ++
@@ -115,11 +117,11 @@ data Event = Mo (Int, Int) | Ke Int
 
 main = withElems ["canvas"] $ \[canvasE] -> do
   evq <- newMVar [Ke 113]
-  canvasE `onEvent` MouseDown $
+  void $ canvasE `onEvent` MouseDown $
     \m -> do
        modifyMVar_ evq $ pure . (++ [Mo $ mouseCoords m])
        preventDefault
-  documentBody `onEvent` KeyDown $
+  void $ documentBody `onEvent` KeyDown $
     \k -> modifyMVar_ evq $ pure . (++ [Ke $ keyCode k])
   Just canvas <- fromElem canvasE
   [grid, buf] <- let (x, y) = snd bnds in
@@ -131,7 +133,7 @@ main = withElems ["canvas"] $ \[canvasE] -> do
   render grid $ color (RGB 192 192 192) $ sequence_
     $ [stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
     ++ [stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
-  seed <- newSeed
+  sg <- getStdGen
   let
     colWire False = color (RGB 255 127 127)
     colWire  True = color (RGB 0 191 0)
@@ -162,5 +164,5 @@ main = withElems ["canvas"] $ \[canvasE] -> do
               newPackets board srcBot else concatMap adv packets }
           else return game1
           void $ setTimer (Once 20) $ loop game2
-    in loop $ Game undefined undefined undefined (randomRs (0, 2^20 :: Int) seed) undefined
+    in loop $ Game undefined undefined undefined (randomRs (0, 2^20 :: Int) sg) undefined
 \end{code}

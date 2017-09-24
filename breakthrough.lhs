@@ -15,9 +15,9 @@ import Control.Monad
 import Data.Array
 import Data.Maybe
 import Data.Tree
+import System.Random
 import Haste
-import Haste.Concurrent hiding ((!))
-import qualified Haste.Concurrent as H
+import Haste.Concurrent
 import Haste.DOM
 import Haste.Events
 import Haste.Graphics.Canvas
@@ -53,14 +53,14 @@ omitWith op ((g, ns):nss) = let
 
 maximize' :: Tree Game -> [(Game, Int)]
 maximize' (Node leaf []) = [(undefined, score leaf)]
-maximize' (Node g kids) = omitWith (<=) $
+maximize' (Node _ kids) = omitWith (<=) $
   [(rootLabel k, map snd $ minimize' k) | k <- kids]
 
 maximize = last . maximize'
 
 minimize' :: Tree Game -> [(Game, Int)]
 minimize' (Node leaf []) = [(undefined, score leaf)]
-minimize' (Node g kids) = omitWith (>=) $
+minimize' (Node _ kids) = omitWith (>=) $
   [(rootLabel k, map snd $ maximize' k) | k <- kids]
 
 best game ms = lastMove $ fst $ maximize $ prune 4 $
@@ -97,6 +97,10 @@ move game (i0, i1@(_, y1)) = let
   nextState = if (p == 1 && y1 == 0) || (p == -1 && y1 == 7) then Won else Play
   in Game nextBoard nextState (if nextState == Won then p else -p) Nothing Nothing (i0, i1)
 
+shuffleIO [] = return []
+shuffleIO xs = getStdRandom (randomR (0, length xs - 1)) >>= \n ->
+  let (a, b:bs) = splitAt n xs in (b:) <$> shuffleIO (a ++ bs)
+
 main = withElems ["canvas", "message"] $ \[canvasE, msg] -> do
   Just canvas <- fromElem canvasE
   whitePiece <- createCanvas sz sz
@@ -116,28 +120,13 @@ main = withElems ["canvas", "message"] $ \[canvasE, msg] -> do
   buf <- createCanvas 320 320
 
   ev <- newEmptyMVar
-  canvasE  `onEvent` MouseDown $ \m -> concurrent $ putMVar ev $ Mo $ mouseCoords m
-  documentBody `onEvent` KeyDown $ \k -> concurrent $ putMVar ev $ Ke $ keyCode k
-
-  seed <- newSeed
-  seedV <- newMVar seed
+  void $ canvasE  `onEvent` MouseDown $ \m ->
+    concurrent $ putMVar ev $ Mo $ mouseCoords m
+  void $ documentBody `onEvent` KeyDown $ \k ->
+    concurrent $ putMVar ev $ Ke $ keyCode k
 
   let
     renderPiece c p (x,y) = renderOnTop c $ draw (if p == 1 then whitePiece else blackPiece) (fromIntegral x, fromIntegral y)
-
-    randomRIO range = do
-      seed <- takeMVar seedV
-      let (r, seed1) = randomR range seed in do
-        putMVar seedV seed1
-        return r
-
-    shuffleIO [] = return []
-    shuffleIO xs = do
-      n <- randomRIO (0, length xs - 1)
-      let (a, b:bs) = splitAt n xs in do 
-        ys <- shuffleIO (a ++ bs)
-        return (b:ys)
-
     drawGame game = do
       sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderPiece buf p (x*sz, y*sz) | i@(x, y) <- range bnds, let p = (board game)!i, p /= 0]
       render canvas $ draw buf (0, 0)
@@ -171,7 +160,7 @@ main = withElems ["canvas", "message"] $ \[canvasE, msg] -> do
         drawGame game1
         if state game1 == Play && player game1 == -1 then do
           wait 1  -- Delay for redraw.
-          ms <- shuffleIO $ nextMoves game1
+          ms <- liftIO $ shuffleIO $ nextMoves game1
           loop game1 { anim = Just (0, best game1 ms) }
         else
           loop game1

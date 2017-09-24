@@ -21,10 +21,12 @@ import Data.List
 import Data.Ord
 import Data.Tree
 import Control.Monad
+import System.Random
 import Haste
 import Haste.DOM
 import Haste.Events
 import Haste.Graphics.Canvas
+import Haste.JSString (pack)
 
 sz = 64; bd = 4; bnds = ((0,0), (2,2))
 moveRandomly = False
@@ -84,18 +86,12 @@ f = fromIntegral
 oblong x y w h = fill $ rect (f x, f y) (f $ x + w, f $ y + h)
 
 main = withElems ["canvas", "message", "noab"] $ \[cElem, message, noab] -> do
-  xo <- loadBitmap "xo.png"
+  xo <- loadBitmap $ pack "xo.png"
   Just canvas <- fromElem cElem
-  seedVar <- newSeed >>= newIORef
   gameVar <- newIORef initGame
   let
-    randomRIO r = do
-      (a, seed1) <- randomR r <$> readIORef seedVar
-      writeIORef seedVar seed1
-      return a
-
     shuffleIO [] = return []
-    shuffleIO xs = randomRIO (0, length xs - 1) >>= \n ->
+    shuffleIO xs = getStdRandom (randomR (0, length xs - 1)) >>= \n ->
       let (a, b:bs) = splitAt n xs in (b:) <$> shuffleIO (a ++ bs)
 
     sq ((x, y), p) = do
