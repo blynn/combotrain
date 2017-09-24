@@ -13,9 +13,8 @@ import Data.Bool
 import Data.IORef
 import Data.List
 import qualified Data.Map.Strict as M
-import Data.Map.Strict ((!), Map)
+import Data.Map.Strict ((!))
 import Data.Maybe
-import Haste
 import Haste.DOM
 import Haste.Events
 import Haste.Graphics.Canvas
@@ -31,7 +30,7 @@ pegPic (p, b) = color (RGB (bool 0 255 b) 0 0) $ spot p rad
 
 ctr x = (x - 3)^2 <= 1
 
-initState = foldl' (\m k -> M.insert k (k /= (3, 3)) m) M.empty
+initState = foldl' (\b k -> M.insert k (k /= (3, 3)) b) M.empty
   [(r, c) | r <- [0..6], c <- [0..6], ctr r || ctr c]
 
 main = withElems ["canvas"] $ \[cElem] -> do
@@ -39,12 +38,12 @@ main = withElems ["canvas"] $ \[cElem] -> do
   ref <- newIORef (initState, Nothing)
 
   let
-    draw = do
+    display = do
       (st, sel) <- readIORef ref
-      render canvas $ mapM pegPic $ M.assocs st
-      unless (isNothing sel) $ let Just p = sel in mapM_ (renderOnTop canvas)
-        [color (RGB 0 0 0) $ spot p $ rad + 2, pegPic (p, st!p)]
-  draw
+      when (isJust sel) $ let Just p = sel in render canvas $
+        color (RGB 0 0 0) $ spot p $ rad + 2
+      void $ renderOnTop canvas $ mapM pegPic $ M.assocs st
+  display
 
   cElem `onEvent` MouseDown $ \(MouseData (x, y) _ _) -> do
     (st, sel) <- readIORef ref
@@ -59,5 +58,5 @@ main = withElems ["canvas"] $ \[cElem] -> do
           M.insert (div (r + r') 2, div (c + c') 2) False st, Just p)
         | otherwise        = (st, Nothing)
     writeIORef ref f
-    draw
+    display
 \end{code}
