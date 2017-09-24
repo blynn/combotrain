@@ -16,10 +16,13 @@ Source [https://github.com/blynn/chapman[git repo]]:
 import Control.Concurrent.MVar
 import Control.Monad
 import Data.Array
+import System.Random
+import System.Random.Shuffle
 import Haste
 import Haste.DOM
 import Haste.Events
 import Haste.Graphics.Canvas
+import Haste.JSString (pack)
 
 data Event = Ready | Slide Int (Int, Int) (Int, Int) deriving Eq
 
@@ -29,13 +32,9 @@ parity []     = 0
 parity (x:xs) = (if x == m^2 then uncurry (+) $ divMod (length xs) m else 0)
               + length (filter (x>) xs) + parity xs
 
-rndPerm [] _     = []
-rndPerm xs seed0 = b:rndPerm (a ++ bs) seed1 where
-  (n, seed1) = randomR (0, length xs - 1) seed0
-  (a, b:bs)  = splitAt n xs
-
-gen = newSeed >>= \seed -> let z = rndPerm [1..m^2] seed
-  in if even $ parity z then return $ listArray bnds z else gen
+gen = do
+  z <- shuffle' [1..m^2] (m^2) <$> newStdGen
+  if even $ parity z then return $ listArray bnds z else gen
 
 tile x y n = color (RGB c c c) $ fill $ rect (fromIntegral x, fromIntegral y)
   (fromIntegral $ x + sz, fromIntegral $ y + sz)
@@ -57,17 +56,17 @@ main = withElems ["canvas"] $ \[cElem] -> do
             then putMVar ev (Ready, b // [(i, b!i0), (i0, b!i)]) >> loop
             else putMVar ev (Slide (frame + 1) i0 i, b) >>
               void (setTimer (Once 10) loop)
-        Ready | [1..m^2] == elems b -> alert "You win!" >> newGame
+        Ready | [1..m^2] == elems b -> alert (pack "You win!") >> newGame
               | otherwise           -> putMVar ev (q, b)
     newGame = gen >>= putMVar ev . (,) Ready >> loop
     try q i0@(r0, c0) i@(r, c) b
       | inRange bnds (r, c) && (c - c0)^2 + (r - r0)^2 == 1 =
         putMVar ev (Slide 0 i0 i, b) >> when (q == Ready) loop
       | otherwise = putMVar ev (q, b)
-  cElem `onEvent` MouseDown $
-    \(MouseData (x, y) _ _) -> takeMVar ev >>= \(q, b) ->
-      try q (head [i | i <- range bnds, b!i == m^2]) (y `div` sz, x `div` sz) b
-  documentBody `onEvent` KeyDown $ \k -> takeMVar ev >>= \(q, b) -> let
+  void $ cElem `onEvent` MouseDown $ \(MouseData (x, y) _ _) ->
+    takeMVar ev >>= \(q, b) -> try q (head [i | i <- range bnds, b!i == m^2])
+      (y `div` sz, x `div` sz) b
+  void $ documentBody `onEvent` KeyDown $ \k -> takeMVar ev >>= \(q, b) -> let
     f (r, c) = try q (r0, c0) (r, c) b >> preventDefault
     (r0, c0) = head [i | i <- range bnds, b!i == m^2]
     in case k of
