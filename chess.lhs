@@ -148,7 +148,7 @@ legalMovesFrom i@(x, y) game = let
 
 legalMoves game = let b = board game in [(i, m) | i <- range bnds, b!i /= Nothing, side (b!i) == (player game), m <- legalMovesFrom i game]
 
--- All moves except castling. 
+-- All moves except castling.
 movesFrom i@(x, y) game = let
   b = board game
   ep = enPassant game
@@ -238,7 +238,7 @@ main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> d
     shuffleIO [] = return []
     shuffleIO xs = do
       n <- randomRIO (0, length xs - 1)
-      let (a, b:bs) = splitAt n xs in do 
+      let (a, b:bs) = splitAt n xs in do
         ys <- shuffleIO (a ++ bs)
         return (b:ys)
 
