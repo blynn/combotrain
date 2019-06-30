@@ -7,4 +7,4 @@ redcode.html: ../play/menu redcode.lhs ; cobble mathbook $^
 site: redcode.js redcode.html ../haskell/menu.html
 
 sync: site
-	rsync redcode.{html,js,lhs} xenon.stanford.edu:www/play/
+	rsync redcode.html redcode.js redcode.lhs xenon.stanford.edu:www/play/
