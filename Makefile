@@ -13,8 +13,5 @@ menu.html: menu ; cobble menu menu
 all: $(SITEFILES)
 %.js : %.lhs ; $(HS2JS) $^
 
-# See comments in chess.hs.
--chess.js : oldchess.js ; cp $^ $@
-
 git-push: ; git push git@github.com:blynn/combotrain.git master
 sync: all; rsync $(SITEFILES) xenon.stanford.edu:www/play/

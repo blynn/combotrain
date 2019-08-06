@@ -21,20 +21,22 @@ Promote your next pawn to:
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-My code stopped working after I upgraded Haste from 0.4 to 0.5. Until I figure
-out why, the above uses the JavaScript compiled by the older Haste.
-
 \begin{code}
+{-# LANGUAGE CPP #-}
 import Control.Monad
 import Data.Array
+import Data.IORef
 import Data.List
 import Data.Maybe
 import Data.Tree
+import Debug.Trace
+#ifdef __HASTE__
 import Haste
 import Haste.DOM
-import qualified Haste.Concurrent as H
 import Haste.Events
 import Haste.Graphics.Canvas
+import System.Random
+#endif
 
 bnds = ((0,0), (7,7)); sz = 40
 
@@ -116,14 +118,6 @@ nextNodes game = if state game == Play then [move game m | m <- legalMoves game]
 prune 0 (Node a _) = Node a []
 prune n (Node a kids) = Node a $ map (prune (n - 1)) kids
 
-box :: Int -> Int -> Int -> Int -> Picture ()
-box x y dx dy = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x+dx), fromIntegral (y+dy))
-
-sqColor False = RGB 191 191 191
-sqColor True  = RGB 255 255 255
-
-drawB pic x y = draw pic (fromIntegral x, fromIntegral y)
-
 nextPlayer White = Black
 nextPlayer Black = White
 
@@ -149,7 +143,7 @@ legalMovesFrom i@(x, y) game = let
 legalMoves game = let b = board game in [(i, m) | i <- range bnds, b!i /= Nothing, side (b!i) == (player game), m <- legalMovesFrom i game]
 
 -- All moves except castling.
-movesFrom i@(x, y) game = let
+movesFrom i@(x, y) game = traceShow i $ let
   b = board game
   ep = enPassant game
   p = side (b!i)
@@ -161,9 +155,9 @@ movesFrom i@(x, y) game = let
   in case piece (b!i) of
     Pawn   -> let i1 = (x, y + dirPlayer p) in (if blank i1 then i1 : (let i2 = (x, y + 2 * dirPlayer p) in if pawnStart && blank i2 then [i2] else []) else [])
       ++ [j | dx <- [-1, 1], let j = (x + dx, y + dirPlayer p), cap j || (ep /= Nothing && let Just (es, ej) = ep in j == ej && es /= p)]
-    Knight -> [i1 | a <- [-1, 1], b <- [-1, 1], f <- [\a b -> (2*a, b), \a b -> (a, 2*b)], let (dx, dy) = f a b, let i1 = (x+dx, y+dy), blankCap i1]
+    Knight -> [i1 | a <- [-1, 1], b <- [-1, 1], (dx, dy) <- [(2*a, b), (a, 2*b)], let i1 = (x+dx, y+dy), blankCap i1]
     Bishop -> concat [scan dx dy | dx <- [-1, 1], dy <- [-1, 1]]
-    Rook   -> concat [scan dx dy | a <- [-1, 1], f <- [id, \(x, y) -> (y, x)], let (dx, dy) = f (a, 0)]
+    Rook   -> concat [scan dx dy | a <- [-1, 1], (dx, dy) <- [(a, 0), (0, a)]]
     Queen  -> concat [scan dx dy | dx <- [-1..1], dy <- [-1..1]]
     King   -> [i1 | dx <- [-1..1], dy <- [-1..1], let i1 = (x+dx, y+dy), blankCap i1]
 
@@ -184,8 +178,6 @@ movePrecheck game m@(i0@(x0, y0), i1@(x1, y1)) = let
   in game { board = b // castleCheck [(i0, Nothing), promoCheck (i1, b!i0)]
           , state = Play
           , player = nextPlayer p
-          , selection = Nothing
-          , anim = Nothing
           , canCastle = delete i0 (canCastle game)
           , enPassant = if piece (b!i0) == Pawn && y0 + dirPlayer p /= y1 then
               Just (p, (x0, y0 + dirPlayer p))
@@ -199,6 +191,15 @@ move game m = let game1 = movePrecheck game m in
           , player = player game }
   else
     game1
+
+#ifdef __HASTE__
+box :: Int -> Int -> Int -> Int -> Picture ()
+box x y dx dy = fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x+dx), fromIntegral (y+dy))
+
+sqColor False = RGB 191 191 191
+sqColor True  = RGB 255 255 255
+
+drawB pic x y = draw pic (fromIntegral x, fromIntegral y)
 
 main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> do
   Just canvas <- fromElem canvasE
@@ -218,29 +219,15 @@ main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> d
   sequence_ $ [renderOnTop boardCan $ color (sqColor (mod (x + y) 2 == 0)) $ box (x*sz) (y*sz) sz sz | (x, y) <- range bnds]
   buf <- createCanvas 320 320
 
-  ev <- H.newEmptyMVar
-  canvasE  `onEvent` MouseDown $ \(MouseData (x, y) _ _) -> H.concurrent $ H.putMVar ev $ EClick x y
-  documentBody `onEvent` KeyDown $ \k -> H.concurrent $ H.putMVar ev $ EKeyDown $ keyCode k
-
-  seed <- newSeed
-  seedV <- H.newMVar seed
+  ref <- newIORef undefined
 
   let
+    shuffleIO [] = return []
+    shuffleIO xs = getStdRandom (randomR (0, length xs - 1)) >>= \n ->
+      let (a, b:bs) = splitAt n xs in (b:) <$> shuffleIO (a ++ bs)
+
     renderPiece c sq (x,y) = renderOnTop c $ translate (fromIntegral (x + if side sq == Black then 40 - 5 else 5), fromIntegral (y + 20)) $
      (if side sq == Black then rotate pi else id) $ text (0, 0) (show $ piece sq)
-
-    randomRIO range = do
-      seed <- H.takeMVar seedV
-      let (r, seed1) = randomR range seed in do
-        H.putMVar seedV seed1
-        return r
-
-    shuffleIO [] = return []
-    shuffleIO xs = do
-      n <- randomRIO (0, length xs - 1)
-      let (a, b:bs) = splitAt n xs in do
-        ys <- shuffleIO (a ++ bs)
-        return (b:ys)
 
     drawGame game = let b = board game in do
       sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderPiece buf sq (x*sz, y*sz) | i@(x, y) <- range bnds, let sq = b!i, sq /= Nothing]
@@ -250,50 +237,51 @@ main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> d
         Won -> " wins"
         Draw -> " draws"
 
-    loop game = let b = board game in if anim game == Nothing then do
-      e <- H.takeMVar ev
-      case e of
-        EClick bx by -> when (state game == Play) $ let
-          sel0 = selection game
-          i@(x, y) = (div bx sz, div by sz)
-          sel = if b!i /= Nothing && side (b!i) == player game then Just i else Nothing
-          in when (inRange bnds i) $ do
-            render canvas $ draw buf (0, 0)
-            if sel0 == Nothing then do
-              unless (sel == Nothing) $ do
-                renderOnTop canvas $ drawB fromCan (x*sz) (y*sz)
-                sequence_ [renderOnTop canvas $
-                  drawB toCan (x1*sz) (y1*sz) | (x1, y1) <- legalMovesFrom i game]
-              loop game { selection = sel }
-            else if i `elem` legalMovesFrom (fromJust sel0) game then do
-              s <- getProp promoSel "value"
-              loop game { anim = Just (0, (fromJust sel0, i)), promoChoice = toPiece s }
-            else
-              loop game { selection = Nothing }
+  let
+    loop g = drawGame g >> writeIORef ref g
+    newGame = loop initGame
 
-        EKeyDown 113 -> do
-          drawGame initGame
-          loop initGame
+  newGame
 
-        _ -> loop game
-
-      else let Just (frame, m@(from@(x0, y0), (x1, y1))) = anim game in
+  let
+    animate game = let b = board game in case anim game of
+      Just (frame, m@(from@(x0, y0), (x1, y1))) ->
         if frame == 8 then let game1 = move game m in do
           drawGame game1
           -- Delay so canvas has a chance to update.
           if state game1 == Play && player game1 == Black then
             void $ setTimer (Once 20) $ do
               ms <- shuffleIO $ legalMoves game1
-              loop game1 { anim = Just (0, best game1 ms) }
+              animate game1 { anim = Just (0, best game1 ms) }
           else
-            loop game1
+            loop game1 { anim = Nothing }
 
-        else let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8 in do
+        else do
+          let f x0 x1 frame = x0 * sz + (x1 - x0) * sz * frame `div` 8
           drawGame game { board = b // [(from, Nothing)] }
           renderPiece canvas (b!from) (f x0 x1 frame, f y0 y1 frame)
-          void $ setTimer (Once 20) $ loop game { anim = Just (frame + 1, m) }
+          void $ setTimer (Once 20) $ animate game { anim = Just (frame + 1, m) }
 
-    game = initGame in do
-      drawGame game
-      H.concurrent $ H.forkIO $ loop game
+  canvasE  `onEvent` MouseDown $ \(MouseData (bx, by) _ _) -> do
+    game <- readIORef ref
+    when (state game == Play && player game == White && anim game == Nothing) $ do
+      let
+        b = board game
+        i@(x, y) = (div bx sz, div by sz)
+        sel = if b!i /= Nothing && side (b!i) == player game then Just i else Nothing
+      when (inRange bnds i) $ do
+        render canvas $ draw buf (0, 0)
+        case selection game of
+          Nothing -> do
+            unless (sel == Nothing) $ do
+              renderOnTop canvas $ drawB fromCan (x*sz) (y*sz)
+              sequence_ [renderOnTop canvas $
+                drawB toCan (x1*sz) (y1*sz) | (x1, y1) <- legalMovesFrom i game]
+            writeIORef ref game { selection = sel }
+          Just sel0 | i `elem` legalMovesFrom sel0 game -> do
+            s <- getProp promoSel "value"
+            animate game { selection = Nothing, anim = Just (0, (sel0, i)), promoChoice = toPiece s }
+          _ -> loop game { selection = Nothing }
+  documentBody `onEvent` KeyDown $ \k -> when (k == 113) newGame
+#endif
 \end{code}
