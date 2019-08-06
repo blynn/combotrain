@@ -21,6 +21,8 @@ Promote your next pawn to:
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+We use a spurious `traceShow` to work around a Haste bug.
+
 \begin{code}
 {-# LANGUAGE CPP #-}
 import Control.Monad
@@ -29,13 +31,13 @@ import Data.IORef
 import Data.List
 import Data.Maybe
 import Data.Tree
-import Debug.Trace
 #ifdef __HASTE__
 import Haste
 import Haste.DOM
 import Haste.Events
 import Haste.Graphics.Canvas
 import System.Random
+import Debug.Trace
 #endif
 
 bnds = ((0,0), (7,7)); sz = 40
@@ -124,6 +126,29 @@ nextPlayer Black = White
 dirPlayer White = -1
 dirPlayer Black = 1
 
+-- All moves except castling.
+#ifdef __HASTE__
+movesFrom i@(x, y) game = traceShow 0 $ case piece (b!i) of
+#else
+movesFrom i@(x, y) game = case piece (b!i) of
+#endif
+  Pawn   -> let i1 = (x, y + dirPlayer p) in (if blank i1 then i1 : (let i2 = (x, y + 2 * dirPlayer p) in if pawnStart && blank i2 then [i2] else []) else [])
+    ++ [j | dx <- [-1, 1], let j = (x + dx, y + dirPlayer p), cap j || (ep /= Nothing && let Just (es, ej) = ep in j == ej && es /= p)]
+  Knight -> [i1 | a <- [-1, 1], b <- [-1, 1], (dx, dy) <- [(2*a, b), (a, 2*b)], let i1 = (x+dx, y+dy), blankCap i1]
+  Bishop -> concat [scan dx dy | dx <- [-1, 1], dy <- [-1, 1]]
+  Rook   -> concat [scan dx dy | a <- [-1, 1], (dx, dy) <- [(a, 0), (0, a)]]
+  Queen  -> concat [scan dx dy | dx <- [-1..1], dy <- [-1..1]]
+  King   -> [i1 | dx <- [-1..1], dy <- [-1..1], let i1 = (x+dx, y+dy), blankCap i1]
+  where
+  b = board game
+  ep = enPassant game
+  p = side (b!i)
+  cap j = onBoard j && b!j /= Nothing && side (b!j) /= p
+  blank j = onBoard j && b!j == Nothing
+  blankCap j = onBoard j && (b!j == Nothing || side (b!j) /= p)
+  pawnStart = (p == White && y == 6) || (p == Black && y == 1)
+  scan dx dy = unfoldr (\(x', y', cont) -> if cont && blankCap (x + x', y + y') then Just ((x + x', y + y'), (x' + dx, y' + dy, blank (x + x', y + y'))) else Nothing) (dx, dy, True)
+
 isCheck p game = let
   b = board game
   k = head [i | i <- range bnds, (b!i) == Just (Square p King)]
@@ -141,25 +166,6 @@ legalMovesFrom i@(x, y) game = let
     else []
 
 legalMoves game = let b = board game in [(i, m) | i <- range bnds, b!i /= Nothing, side (b!i) == (player game), m <- legalMovesFrom i game]
-
--- All moves except castling.
-movesFrom i@(x, y) game = traceShow i $ let
-  b = board game
-  ep = enPassant game
-  p = side (b!i)
-  cap j = onBoard j && b!j /= Nothing && side (b!j) /= p
-  blank j = onBoard j && b!j == Nothing
-  blankCap j = onBoard j && (b!j == Nothing || side (b!j) /= p)
-  pawnStart = (p == White && y == 6) || (p == Black && y == 1)
-  scan dx dy = unfoldr (\(x', y', cont) -> if cont && blankCap (x + x', y + y') then Just ((x + x', y + y'), (x' + dx, y' + dy, blank (x + x', y + y'))) else Nothing) (dx, dy, True)
-  in case piece (b!i) of
-    Pawn   -> let i1 = (x, y + dirPlayer p) in (if blank i1 then i1 : (let i2 = (x, y + 2 * dirPlayer p) in if pawnStart && blank i2 then [i2] else []) else [])
-      ++ [j | dx <- [-1, 1], let j = (x + dx, y + dirPlayer p), cap j || (ep /= Nothing && let Just (es, ej) = ep in j == ej && es /= p)]
-    Knight -> [i1 | a <- [-1, 1], b <- [-1, 1], (dx, dy) <- [(2*a, b), (a, 2*b)], let i1 = (x+dx, y+dy), blankCap i1]
-    Bishop -> concat [scan dx dy | dx <- [-1, 1], dy <- [-1, 1]]
-    Rook   -> concat [scan dx dy | a <- [-1, 1], (dx, dy) <- [(a, 0), (0, a)]]
-    Queen  -> concat [scan dx dy | dx <- [-1..1], dy <- [-1..1]]
-    King   -> [i1 | dx <- [-1..1], dy <- [-1..1], let i1 = (x+dx, y+dy), blankCap i1]
 
 movePrecheck game m@(i0@(x0, y0), i1@(x1, y1)) = let
   b = board game
