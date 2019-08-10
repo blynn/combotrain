@@ -79,7 +79,7 @@ worth Pawn   = 100
 worth Knight = 300
 worth Bishop = 350
 worth Rook   = 500
-worth Queen  = 1000
+worth Queen  = 900
 worth King   = 0
 
 toPiece "Knight" = Knight
@@ -207,6 +207,19 @@ sqColor True  = RGB 255 255 255
 
 drawB pic x y = draw pic (fromIntegral x, fromIntegral y)
 
+sym White King = "\x2654"
+sym White Queen = "\x2655"
+sym White Rook = "\x2656"
+sym White Bishop = "\x2657"
+sym White Knight = "\x2658"
+sym White Pawn = "\x2659"
+sym Black King = "\x265a"
+sym Black Queen = "\x265b"
+sym Black Rook = "\x265c"
+sym Black Bishop = "\x265d"
+sym Black Knight = "\x265e"
+sym Black Pawn = "\x265f"
+
 main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> do
   Just canvas <- fromElem canvasE
   whitePiece <- createCanvas sz sz
@@ -232,8 +245,7 @@ main = withElems ["canvas", "message", "promo"] $ \[canvasE, msg, promoSel] -> d
     shuffleIO xs = getStdRandom (randomR (0, length xs - 1)) >>= \n ->
       let (a, b:bs) = splitAt n xs in (b:) <$> shuffleIO (a ++ bs)
 
-    renderPiece c sq (x,y) = renderOnTop c $ translate (fromIntegral (x + if side sq == Black then 40 - 5 else 5), fromIntegral (y + 20)) $
-     (if side sq == Black then rotate pi else id) $ text (0, 0) (show $ piece sq)
+    renderPiece c sq (x,y) = renderOnTop c $ font "40px sans-serif" $ text (fromIntegral x + 2, fromIntegral y + 35) (sym (side sq) (piece sq))
 
     drawGame game = let b = board game in do
       sequence_ $ (render buf $ draw boardCan (0, 0)) : [renderPiece buf sq (x*sz, y*sz) | i@(x, y) <- range bnds, let sq = b!i, sq /= Nothing]
