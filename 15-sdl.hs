@@ -55,7 +55,7 @@ main = withInit [InitEverything] $ do
         Quit    -> return (True, anim)
         KeyDown (Keysym SDLK_ESCAPE _ _) -> return (True, anim)
         KeyDown (Keysym sym _ _) -> eventLoop board $
-          if anim /= Ready then anim else key board sym 
+          if anim /= Ready then anim else key board sym
         _       -> eventLoop board anim
     newGame = do
       x <- gen

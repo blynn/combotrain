@@ -31,3 +31,7 @@ $ haste-cabal update
 $ haste-cabal install parsec-3.1.11
 $ haste-cabal install random-shuffle-0.0.2
 ------------------------------------------------------------------------------
+
+Note to self: on NixOS, to get `haste-cabal` working, I had to run a
+`nix-shell` with an FHS environment with `libz.so.1` soft-linked to the
+subdirectory containing `haste-cabal.bin`.
