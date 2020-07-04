@@ -1,7 +1,7 @@
 .PHONY: all sync push target
 target: all
 
-HSFILES=tictactoe netwalk breakthrough peg chess index redcode
+HSFILES=tictactoe netwalk breakthrough peg chess index redcode 15
 
 SITEFILES=$(addsuffix .html, $(HSFILES)) $(addsuffix .js, $(HSFILES)) xo.png
 
@@ -15,3 +15,5 @@ all: $(SITEFILES)
 
 git-push: ; git push git@github.com:blynn/combotrain.git master
 sync: all; rsync $(SITEFILES) crypto.stanford.edu:www/play/
+
+15 : 15.hs ; ghc $^
