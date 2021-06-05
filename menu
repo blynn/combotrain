@@ -6,8 +6,11 @@ tictactoe,Tic-Tac-Toe
 breakthrough,Breakthrough
 chess,Chess
 redcode,Core War
+puzzlescript,PuzzleScript
 \
 \''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 \
 \- link:../haskell[Haskell Notes]
+\- link:../compiler[Compilers]
+\- link:../lambda[Lambda Calculus]
 \- link:../[Ben Lynn]
