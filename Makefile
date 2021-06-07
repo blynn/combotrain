@@ -16,4 +16,9 @@ all: $(SITEFILES)
 git-push: ; git push git@github.com:blynn/combotrain.git master
 sync: all; rsync $(SITEFILES) crypto.stanford.edu:www/play/
 
-15 : 15.hs ; ghc $^
+15 : 15-sdl.hs ; ghc $^
+
+asterius/15.wasm asterius/15.js: 15.lhs
+	mkdir -p asterius
+	cp 15.lhs asterius/
+	podman run -it --rm -v `pwd`/asterius:/mirror -w /mirror terrorjack/asterius:latest ahc-link --bundle --browser --ghc-option -O --input-hs 15.lhs

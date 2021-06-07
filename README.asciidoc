@@ -1,6 +1,4 @@
-= JavaScript Games =
-
-Written in Haskell. Requires http://haste-lang.org/[the Haste compiler].
+= Browser Games =
 
 https://crypto.stanford.edu/~blynn/play/[Play now!]
 
