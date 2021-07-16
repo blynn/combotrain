@@ -7,6 +7,9 @@ Connect all terminals to the server.
 <script src="netwalk.js"></script>
 <canvas id="canvas" style="border:1px solid black; display:block;margin:auto;"
   width="320" height="288"></canvas>
+<br>
+<div style="text-align:center;">
+<button id='newgame'>New Game</button>
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -115,8 +118,9 @@ paint pic = do
 
 data Event = Mo (Int, Int) | Ke Int
 
-main = withElems ["canvas"] $ \[canvasE] -> do
+main = withElems ["canvas", "newgame"] $ \[canvasE, newB] -> do
   evq <- newMVar [Ke 113]
+  void $ newB `onEvent` MouseDown $ \_ -> modifyMVar_ evq $ pure . (++ [Ke 113])
   void $ canvasE `onEvent` MouseDown $
     \m -> do
        modifyMVar_ evq $ pure . (++ [Mo $ mouseCoords m])
