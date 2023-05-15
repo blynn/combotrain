@@ -63,7 +63,7 @@ Gemini
 //////////////////////////////////////////////////////////////////////////////
 
 The programs are written in a language called Redcode. For details, read the
-original http://www.koth.org/info/akdewdney/['Scientific American' articles]
+original http://www.koth.org/info/akdewdney/[_Scientific American_ articles]
 introducing the game, as well as
 http://vyznev.net/corewar/guide.html[a guide to the 1994 revision of Redcode],
 which is nicer than http://corewar.co.uk/standards/icws94.htm[the official document]. See also

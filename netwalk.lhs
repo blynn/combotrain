@@ -2,171 +2,425 @@
 
 Connect all terminals to the server.
 
-[pass]
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script src="netwalk.js"></script>
-<canvas id="canvas" style="border:1px solid black; display:block;margin:auto;"
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<canvas id="canvas" style="border:1px solid black; display:block;margin:auto; image-rendering: pixelated; image-rendering: crisp-edges;"
   width="320" height="288"></canvas>
 <br>
-<div style="text-align:center;">
-<button id='newgame'>New Game</button>
-</div>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<div style="text-align:center;"><button id="newB">New Game</button></div>
+<br>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Source:
+I rewrote the source for this game, because the first version seemed out of
+place because it was strongly influenced by my C version targeting SDL. I also
+switched to my own Haskell compiler; orignally I targeted the Haste compiler
+but this project no longer seems active.
 
 \begin{code}
-import Control.Concurrent.MVar
-import Control.Monad
-import Data.Array
-import Data.List
-import System.Random
-import Haste
-import Haste.DOM
-import Haste.Events
-import Haste.Graphics.Canvas
-
-bnds = ((0,0), (9,8))
-srcTop = (div x 2, div y 2) where (x, y) = snd bnds
-srcBot = (x, y + 1) where (x, y) = srcTop
-isSrc i = i == srcTop || i == srcBot
-
-data Tile = Tile { xy :: (Int, Int), ways :: [(Int, Int)] } | Blank deriving Eq
-
-data Game = Game { board   :: Array (Int, Int) Tile
-                 , live    :: Array (Int, Int) Bool
-                 , state   :: State
-                 , rands   :: [Int]
-                 , packets :: [((Int, Int), (Int, Int), Int)]
-                 }
-
-data State = Won | Play deriving Eq
-
-gen [] board (r:rs) = scramble (scrambleSrc board r) rs
-gen seeds board (r:r1:rs) = let
-  (as, b@(Tile i@(x, y) w):bs) = splitAt (mod r $ length seeds) seeds
-  exits = [(j, dj) | dj@(dx,dy) <- [(1,0),(0,-1),(-1,0),(0,1)],
-    let j = (x+dx, y+dy), inRange bnds j, (board!j) == Blank,
-    i /= srcTop || dx == 0]
-  in if null exits then gen (as ++ bs) board (r1:rs) else let
-    (j, dj@(dx,dy)) = exits!!(r1 `mod` length exits)
-    augT = Tile i (dj:w)
-    newT = Tile j [(-dx, -dy)]
-    in gen ((augT:newT:as) ++ bs) (board // [(i, augT), (j, newT)]) rs
-
-scramble board rs = let
-  f i r | isSrc i   = (i, board!i)
-        | otherwise = (i, iterate rot (board!i) !! (r `mod` 4))
-  in (array bnds $ zipWith f (range bnds) rs, drop (rangeSize bnds) rs)
-
-scrambleSrc board r = iterate srcRot board !! (r `mod` 4)
-
-followLive game = f [srcBot] (listArray bnds $ repeat False) 0 where
-  f [] acc n =
-    game { live = acc, state = if n == rangeSize bnds then Won else Play }
-  f (i@(x, y):is) acc n
-    | acc!i = f is acc n
-    | otherwise = f (is ++ js) (acc // [(i, True)]) (n + 1)
-    where
-      board = Main.board game
-      js = [j | (dx,dy) <- ways (board!i), let j = (x+dx, y+dy), inRange bnds j,
-        (-dx, -dy) `elem` ways (board!j), not (acc!j)]
-
-rot (Tile i w) = Tile i $ map (\(x, y) -> if y /= 0 then (-y, 0) else (0, x)) w
-rot Blank      = Blank
-
-srcRot board = let
-  Tile _ w = rot $ Tile (0, 0) $ delete (0, -1) (ways $ board!srcBot) ++
-    filter (== (0, -1)) (ways $ board!srcTop)
-  in board // [(srcTop, Tile srcTop $ (0,  1) : filter (== (0, -1)) w),
-               (srcBot, Tile srcBot $ (0, -1) : filter (/= (0, -1)) w)]
-
-newPackets board i = [(i, dj, 0) | dj <- ways (board!i)]
-
-initGame rs = let
-  top = Tile srcTop [(0, 1)]
-  bot = Tile srcBot [(0, -1)]
-  (board, rs1) = gen [top, bot] (listArray bnds (repeat Blank) //
-    [(srcTop, top), (srcBot, bot)]) rs
-  in followLive $ Game board undefined Play rs1 []
-
--- We only handle the oldest event. We could simplify evq.
-handle game@(Game board live state _ packets) (Mo (mx, my):_)
-  | not $ inRange bnds i = (game, False)
-  | state == Play        =
-   (followLive $ game { board =
-     if isSrc i then srcRot board else board // [(i, rot $ board!i)] }, True)
-  | otherwise            =
-   (game { packets = packets ++ newPackets board i }, False)
-  where i = (mx `div` 32, my `div` 32)
-handle game (Ke 113:_) = (initGame (rands game), True)
-handle game _ = (game, False)
-
-lineB :: Int -> Int -> Int -> Int -> Shape ()
-lineB x y dx dy = line (0.5 + fromIntegral x, 0.5 + fromIntegral y) (0.5 + fromIntegral (x + dx), 0.5 + fromIntegral (y + dy))
-
-rectB c x y dx dy = do
-  color c $ fill $ rect (fromIntegral x, fromIntegral y) (fromIntegral (x + dx), fromIntegral (y + dy))
-  color (RGB 0 0 0) $ stroke $ rect (fromIntegral x - 0.5, fromIntegral y - 0.5) (fromIntegral (x + dx) + 0.5, fromIntegral (y + dy) + 0.5)
-
-drawB p (x, y) = draw p (fromIntegral x, fromIntegral y)
-
-paint pic = do
-  can <- createCanvas 32 32
-  render can pic
-  return can
-
-data Event = Mo (Int, Int) | Ke Int
-
-main = withElems ["canvas", "newgame"] $ \[canvasE, newB] -> do
-  evq <- newMVar [Ke 113]
-  void $ newB `onEvent` MouseDown $ \_ -> modifyMVar_ evq $ pure . (++ [Ke 113])
-  void $ canvasE `onEvent` MouseDown $
-    \m -> do
-       modifyMVar_ evq $ pure . (++ [Mo $ mouseCoords m])
-       preventDefault
-  void $ documentBody `onEvent` KeyDown $
-    \k -> modifyMVar_ evq $ pure . (++ [Ke $ keyCode k])
-  Just canvas <- fromElem canvasE
-  [grid, buf] <- let (x, y) = snd bnds in
-    replicateM 2 $ createCanvas ((x+1)*32) ((y+1)*32)
-  liveEnd <- paint $ rectB (RGB 255 255 0) 9 9 14 14
-  deadEnd <- paint $ rectB (RGB 191 191 191) 10 10 13 13
-  packet  <- paint $ color (RGB 0 0 0) (fill $ circle (16, 16) 5) >>
-                     color (RGB 255 255 255) (fill $ circle (16, 16) 4)
-  render grid $ color (RGB 192 192 192) $ sequence_
-    $ [stroke $ lineB (x*32) 0 0 288 | x <- [1..9]]
-    ++ [stroke $ lineB 0 (y*32) 320 0 | y <- [1..8]]
-  sg <- getStdGen
-  let
-    colWire False = color (RGB 255 127 127)
-    colWire  True = color (RGB 0 191 0)
-    endPic False = deadEnd
-    endPic True = liveEnd
-    drawTile _ Blank = return ()
-    drawTile live (Tile (x,y) w) = let (ox,oy) = (x*32, y*32) in do
-      sequence_ [renderOnTop buf $ colWire live $ stroke $
-        lineB (ox + 16) (oy + 16) (16 * dx) (16 * dy) | (dx,dy) <- w]
-      when (length w == 1) $ renderOnTop buf $ drawB (endPic live) (ox, oy)
-    loop game = handle game <$> swapMVar evq [] >>=
-      \(game1@(Game board live state rs packets), isDirty) -> let
-        adv packet@((x, y), (dx, dy), t) =
-          if t < 16 - 1 then [((x, y), (dx, dy), t + 1)] else let
-            (x1, y1) = (x + dx, y + dy)
-            in [((x1, y1), dj, 0) | dj <- ways $ board!(x1, y1), dj /= (-dx, -dy)]
-        in do
-          when isDirty $ do
-            render buf $ draw grid (0, 0)
-            sequence_ [drawTile (live!i) (board!i) | i <- range bnds]
-            renderOnTop buf $ let (x,y) = srcTop in
-              rectB (RGB 95 95 191) (x * 32 + 9) (y * 32 + 9) 16 48
-          render canvas $ draw buf (0, 0)
-          game2 <- if state == Won then do
-            sequence_ [renderOnTop canvas $ drawB packet
-              (32*x + 2*t*dx, 32*y + 2*t*dy) | ((x,y), (dx,dy), t) <- packets]
-            return $ game1 { packets = if null packets then
-              newPackets board srcBot else concatMap adv packets }
-          else return game1
-          void $ setTimer (Once 20) $ loop game2
-    in loop $ Game undefined undefined undefined (randomRs (0, 2^20 :: Int) sg) undefined
+module Main where
+import System
+import Base
+import Map
 \end{code}
+
+== Random Number Generator ==
+
+Instead of a library, we roll our own pseudo-random number generator, which
+gives us an excuse to learn about
+https://www.pcg-random.org/index.html[_permuted congruential generators_].
+Although PRNGs based on those of
+https://www.pcg-random.org/posts/bob-jenkins-small-prng-passes-practrand.html[Bob
+Jenkins]
+may suit us just fine, a PCG is easier to code, and perhaps also easier to
+comprehend.
+
+We choose PCG-XSH-RR with 64-bit state and 32-bit output, which is just like a
+venerable linear congruential generator except we twiddle the bits of the
+current state before we output it.
+
+The multiplier is a certain constant. The increment can be any odd number,
+while there are no restrictions on the state.
+
+We hew closely to the https://github.com/imneme/pcg-c-basic[the minimal C demo]
+for easy comparison. In C, the next state is precomputed to benefit from
+parallelization, but it makes no difference in Haskell due to lazy evaluation.
+To reproduce the numbers generated by `pcg32-demo.c`:
+
+------------------------------------------------------------------------
+take 777 $ fromPCG $ pcg 42 54
+------------------------------------------------------------------------
+
+\begin{code}
+data PCG = PCG Word64 Word64
+pcg a b = PCG (a + b') b' where b' = 2*b + 1
+
+next :: PCG -> (Word, PCG)
+next (PCG x inc) = (r, PCG x' inc) where
+  x' = 6364136223846793005*x + inc
+  r = (fromIntegral (x `xor` (x `shiftR` 18) `shiftR` 27) :: Word) `rotateR` (fromIntegral $ x `shiftR` 59)
+
+fromPCG p = map (fromIntegral . fst) $ tail $ iterate (next . snd) (undefined, p)
+\end{code}
+
+We split a PCG into two PCGs by using the next 8 generated 32-bit words to
+initialize two new PCGs:
+
+\begin{code}
+split :: PCG -> (PCG, PCG)
+split p = (PCG (lohi a b) (lohi c d), PCG (lohi e f) (lohi g h)) where
+  [a,b,c,d,e,f,g,h] = take 8 $ fromPCG p
+  lohi = Word64
+\end{code}
+
+We exploit knowledge of the implementation of 64-bit words in our compiler,
+which we will probably regret one day!
+
+== Gaussian Integers ==
+
+The original version represented the board as a C programmer might: with a 2D
+array. This is expensive in Haskell, because updating a single tile requires
+copying the rest of the entire array behind the scenes.
+
+In theory, linear Haskell could eliminate this penalty, but for now we use
+`Map` instead of an array. A key is a location of a tile, and the corresponding
+value is the list of outgoing edges of the tile.
+
+We also represent coordinates with a Gaussian integer (or more precisely, a
+Gaussian `Int`)  instead of a pair. Both data types contain the same
+information, but we can naturally define ring operations on Gaussian integers:
+
+\begin{code}
+infixl 6 :+
+data GaussInt = Int :+ Int deriving (Show, Eq)
+instance Ring GaussInt where
+  (a :+ b) + (c :+ d) = (a + c) :+ (b + d)
+  (a :+ b) - (c :+ d) = (a - c) :+ (b - d)
+  (a :+ b) * (c :+ d) = (a*c - b*d) :+ (a*d + b*c)
+  fromInteger a = fromInteger a :+ 0
+aye = 0 :+ 1
+\end{code}
+
+A 90-degree rotation is then simply multiplication by `aye`, a name we chose
+because `i` might be confusing.
+
+We define handy functions for getting at the coordinates, along with a
+mathematicaly obscene ordering on our Gaussian integers so they can be used as
+keys in a `Map`.
+
+\begin{code}
+re (x :+ _) = x
+im (_ :+ y) = y
+instance Ord GaussInt where a :+ b <= c :+ d = (a, b) <= (c, d)
+\end{code}
+
+== Orthogonal Planar Trees ==
+
+The heart of the game is code that generates a tree sprawled all over a grid,
+then rotates each tile. For detecting victory and for rendering, we also need a
+function to explore edges to find all tiles connected to the root.
+
+Throughout our code, the root is a special case because it consists of two
+vertically adjacent tiles instead of one, while still only having at most 4
+edges. Like other tiles, it has at most one for a given cardinal direction,
+where an edge going up is connected to the top tile and the others are
+conencted to the bottom.
+
+It seems convenient to leave the two root tiles are disconnected until victory,
+whereupon we add an internal edge between them to aid the victory animation.
+
+Some functions expect a never-ending list whose items are meant to be produced
+by a random number generator. Our `fromPCG` function produces such a list from
+a `PCG` value.
+
+The first version expected each function to take as much as it needs from a
+given lazy list and return the rest. This time we remove this requirement,
+simplifying code at the cost of splitting a PCG to give each function its own
+list of random numbers.
+
+\begin{code}
+bnds = (0, 9 :+ 8)
+rootTop = div x 2 :+ div y 2 where x :+ y = snd bnds
+rootBot = rootTop + aye
+isRoot i = i == rootTop || i == rootBot
+inRange (x0 :+ y0, x1 :+ y1) (x :+ y) = and [x0 <= x, x <= x1, y0 <= y, y <= y1]
+dirs = take 4 $ iterate (aye *) 1
+
+gen [] board _ = board
+gen seeds board (r:r1:rs) = let
+  (as, b@(z, ws):bs) = splitAt (mod r $ length seeds) seeds
+  exits = [(j, d) | d <- dirs \\ ws, z /= rootTop || re d == 0,
+    let j = z + d, inRange bnds j, not $ member j board]
+  in if null exits then gen (as ++ bs) board (r1:rs) else let
+    (j, d) = exits!!(r1 `mod` length exits)
+    augT = (z, d:ws)
+    newT = (j, [-d])
+    in gen (augT:newT:(as ++ bs)) (uncurry insert newT $ uncurry insert augT board) rs
+
+rot k = map (dirs!!k *)
+
+rotateRoot board r
+  = insert rootTop (filter (== -aye) ws)
+  $ insert rootBot (filter (/= -aye) ws) board
+  where
+  ws = rot (mod r 4) (board!rootTop ++ board!rootBot)
+
+rotateAll board (r:rs) = fromList $ zipWith go (toAscList $ rotateRoot board r) rs where
+  go (z, ws) r = (z,) \cases
+    | z == rootTop || z == rootBot -> ws
+    | otherwise -> rot (mod r 4) ws
+
+initGame rs = rotateAll board rs1 where
+  root = [(rootTop, []), (rootBot, [])]
+  board = gen root (fromList root) rs2
+  (rs1, rs2) = splitAt ((x + 1)*(y + 1) + 1) rs where x :+ y = snd bnds
+
+walk board = go [rootBot, rootTop] Tip where
+  go [] acc = acc
+  go (z:zs) acc
+    | member z acc = go zs acc
+    | otherwise = go (js ++ zs) $ insert z () acc
+    where
+    js = [j | d <- board!z, let j = z + d, not $ member j acc, maybe False (elem -d) $ mlookup j board]
+\end{code}
+
+We have a little more pure code for the logic driving the victory animation.
+
+\begin{code}
+newPackets board z = [((z, d), 0) | d <- board!z]
+adv board dt packet@((z, d), t)
+  | t1 < 16 = [((z, d), t1)]
+  | otherwise = [((z1, d1), t1 - 16) | d1 <- maybe [] id $ mlookup z1 board, d1 /= -d]
+  where
+  t1 = min 31 $ t + dt
+  z1 = z + d
+newPacketCheck board = \case
+  [] -> newPackets board rootBot
+  p -> p
+\end{code}
+
+== The real world ==
+
+Alas, getting our hands dirty is inevitable. At some point we must hook up
+our pure code to a web page via drawing routines, event-handling routines,
+and so on.
+
+We go above and beyond to initialize our random number generator, calling
+`crypto.getRandomValues` to obtain high-quality starting values:
+
+\begin{code}
+overkillPCG = do
+  (s1, _:s2)  <- break (== ',') <$> jsEval "{const a=new BigUint64Array(2);self.crypto.getRandomValues(a);a.toString();}"
+  pure $ pcg (fromInteger $ readInteger s1) $ fromInteger $ readInteger s2
+\end{code}
+
+Our tile-drawing function is tightly coupled to our JavaScript, expecting the
+variable `cctx` to be set to the drawing context of the main canvas.
+
+The first version of our code added 0.5 to each coordinate to get crisp thin
+lines. This time we use CSS to avoid fuzzy lines.
+
+\begin{code}
+drawTile lives (z@(x :+ y), ws) = do
+  mapM_ (\(dx :+ dy) -> jsEval $ [r|
+cctx.strokeStyle = "rgb(|] ++ (if isLive then "0,191,0" else "255,127,127") ++ [r|)";
+cctx.strokeRect(|] ++ intercalate "," (show <$> [ox, oy, 16*dx, 16*dy]) ++ [r|);
+|]) ws
+  when (length ws == 1) $ (*> pure ()) $ jsEval $ [r|
+cctx.drawImage(|] ++ (if isLive then "liveEnd" else "deadEnd") ++ ", " ++ show (32*x) ++ "," ++ show (32*y) ++ [r|);
+|]
+  where
+  ox = 32*x + 16
+  oy = 32*y + 16
+  isLive = member z lives
+\end{code}
+
+Unlike our previous version, we draw some images wtih JavaScript and assign
+to variables such as `liveEnd`, `deadEnd`, and `backlayer`. The Haste compiler
+is bundled with wrappers for routines that drew on an HTML canvas; our compiler
+lacks these, and we have no wish to add them for now.
+
+Our compiler also lacks a nice way to call Haskell closures from JavaScript.
+We concoct an ad hoc string-based scheme based on the `get_global()` and
+`set_global()` funcitons of our RTS.
+
+The game state is stored in an `IORef` pair consisting of the board and the
+list of packets being animated. The latter is non-empty if and only if the
+game is won, a fact our code depends on. (In our first version, we maintained
+a flag instead, which is perhaps clearer, but I felt lazy this time!)
+
+This time around, instead of setting timers to go off every 20 milliseconds (at
+most) and always painting the next frame, we call `requestAnimationFrame()`.
+This is more complex, as the frame we paint depends on the time elapsed since
+the previous call, but produces better animations.
+
+\begin{code}
+foreign import ccall "get_global" global :: IO a
+foreign import ccall "set_global" setGlobal :: a -> IO ()
+
+foreign import ccall "eval_put" eval_put :: Char -> IO ()
+foreign import ccall "eval_run" eval_run :: IO ()
+foreign import ccall "eval_size" eval_size :: IO Int
+foreign import ccall "eval_at" eval_at :: Int -> IO Char
+
+jsEval s = do
+  mapM eval_put s
+  eval_run
+  n <- eval_size
+  mapM eval_at [0..n-1]
+
+spinOffRandoms ref = do
+  next <- readIORef ref
+  let (a, b) = split next
+  writeIORef ref b
+  pure $ fromPCG a
+
+update ref board = do
+  jsEval "cctx.drawImage(backlayer, 0, 0);"
+  let lives = walk board
+  mapM_ (drawTile lives) $ toAscList board
+  jsEval $ "box(cctx, 'rgb(95,95,191)'," ++ intercalate "," (show <$> [32*re rootTop + 9, 32*im rootTop + 9, 16, 48]) ++ ");"
+  if size lives == size board
+    then do
+      board <- pure $ insert rootTop (aye : board!rootTop) $ insert rootBot (-aye : board!rootBot) board
+      writeIORef ref (board, newPacketCheck board [])
+      jsEval "sctx.drawImage(canvas, 0, 0);"
+      jsEval "window.requestAnimationFrame(animate);"
+      pure ()
+    else writeIORef ref (board, [])
+  pure ()
+
+foreign export ccall "main" main
+main = do
+  timeRef <- newIORef Nothing
+  gameRef <- newIORef undefined
+  pcgRef <- newIORef =<< overkillPCG
+  update gameRef . initGame =<< spinOffRandoms pcgRef
+  let
+    dispatch "new" _ = do
+      jsEval "if (af) window.cancelAnimationFrame(af);\naf = undefined;"
+      writeIORef timeRef Nothing
+      update gameRef . initGame =<< spinOffRandoms pcgRef
+    dispatch "click" as | [mx, my] <- fromIntegral . readInteger <$> as = do
+      let z = mx `div` 32 :+ my `div` 32
+      (board, packets) <- readIORef gameRef
+      case packets of
+        [] | z == rootTop || z == rootBot -> update gameRef $ rotateRoot board 1
+           | Just ws <- mlookup z board -> update gameRef $ insert z (rot 1 ws) board
+           | otherwise -> pure ()
+        _ -> writeIORef gameRef (board, newPackets board z ++ packets)
+    dispatch "animate" [arg] | now <- readInteger arg = let
+      step delta = do
+        writeIORef timeRef $ Just now
+        (board, packets) <- readIORef gameRef
+        jsEval "cctx.drawImage(solved, 0, 0);"
+        sequence [jsEval $ "putPacket(" ++ intercalate "," (show <$> [32*x + 2*t*dx, 32*y + 2*t*dy]) ++ ");" | ((x :+ y, dx :+ dy), t) <- packets]
+        writeIORef gameRef (board, newPacketCheck board $ adv board delta =<< packets)
+      in do
+        readIORef timeRef >>= maybe (step 0) \t0 -> do
+          let delta = div (fromIntegral $ now - t0) 20
+          when (delta > 0) $ step delta
+        jsEval "af = window.requestAnimationFrame(animate);"
+        pure ()
+
+  setGlobal do
+    f:as <- words <$> getContents
+    dispatch f as
+
+foreign export ccall "continue" continue
+continue = global >>= id
+\end{code}
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script>
+"use strict";
+function box(ctx,sty,x,y,dx,dy) {
+  ctx.fillStyle = sty;
+  ctx.fillRect(x, y, dx, dy);
+  ctx.strokeStyle = "rgb(0,0,0)";
+  ctx.strokeRect(x-0.5, y-0.5, dx+1, dy+1);
+}
+let af;
+const solved = document.createElement('canvas');
+solved.width = canvas.width, solved.height = canvas.height;
+const sctx = solved.getContext("2d");
+const liveEnd = document.createElement('canvas');
+liveEnd.width = 32, liveEnd.height = 32;
+box(liveEnd.getContext("2d"), "rgb(255,255,0)", 9, 9, 14, 14);
+const deadEnd = document.createElement('canvas');
+deadEnd.width = 32, deadEnd.height = 32;
+box(deadEnd.getContext("2d"), "rgb(191,191,191)", 10, 10, 13, 13);
+const packet = document.createElement('canvas');
+packet.width = 32, packet.height = 32;
+{
+  const ctx = packet.getContext("2d");
+  ctx.beginPath()
+  ctx.fillStyle = "rgb(0,0,0)";
+  ctx.arc(16, 16, 5, 0, 2*Math.PI);
+  ctx.fill();
+  ctx.beginPath()
+  ctx.fillStyle = "rgb(255,255,255)";
+  ctx.arc(16, 16, 4, 0, 2*Math.PI);
+  ctx.fill();
+}
+const cctx = canvas.getContext("2d");
+const env = {};
+function putPacket(x, y) { cctx.drawImage(packet, x, y); }
+function run(f, s) {
+  env.out = [];
+  env.inp = teen(s);
+  env.cursor = 0;
+  env.eval_in = [], env.eval_out = [];
+  env.instance.exports[f]();
+  return tedea(env.out);
+}
+const backlayer = document.createElement('canvas');
+backlayer.width = canvas.width, backlayer.height = canvas.height;
+{
+  const ctx = backlayer.getContext("2d");
+  ctx.fillStyle="rgb(255,255,255)";
+  ctx.fillRect(0, 0, backlayer.width, backlayer.height);
+  ctx.strokeStyle="rgb(192,192,192)";
+
+  ctx.beginPath();
+  for (let i = 1; i <= 9; i++) {
+    ctx.moveTo(32*i, 0);
+    ctx.lineTo(32*i, 288);
+  }
+  for (let i = 1; i <= 8; i++) {
+    ctx.moveTo(0, 32*i);
+    ctx.lineTo(320, 32*i);
+  }
+  ctx.stroke();
+}
+
+function teen(s) { return (new TextEncoder()).encode(s); }
+function tede(s) { return (new TextDecoder()).decode(s); }
+function tedea(a) { return (new TextDecoder()).decode(Uint8Array.from(a)); }
+
+async function load() {
+  try {
+    env.instance = (await WebAssembly.instantiateStreaming(fetch('netwalk.wasm'), {env:
+      { putchar: c  => env.out.push(c)
+      , eof    : () => env.cursor == env.inp.length
+      , getchar: () => env.inp[env.cursor++]
+
+      , eval_put : c  => env.eval_in.push(c)
+      , eval_run : () => {
+          env.eval_out = teen(eval(tedea(env.eval_in)));
+          env.eval_in = [];
+        }
+      , eval_size: () => env.eval_out.length
+      , eval_at:   i  => env.eval_out[i]
+      }})).instance;
+    run("main", "");
+    canvas.onselectstart = function () { return false; }
+    canvas.addEventListener("click", (event) => run("continue", "click " + event.offsetX + " " + event.offsetY));
+    document.getElementById('newB').addEventListener("click", (event) => run("continue", "new"));
+    document.body.addEventListener("keydown", (event) => {if (event.key == "F2") run("continue", "new")});
+  } catch(err) {
+    console.log(err);
+  }
+}
+function animate(t) { run("continue", "animate " + Math.round(t)); }
+load();
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

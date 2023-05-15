@@ -13,6 +13,11 @@ install at the time.
 I could mostly pretend it was Haskell as usual, though some differences
 arose.
 
+Sadly, the Haste compiler appears to be abandoned now. On the other hand,
+it looks like GHC is gaining JavaScript and WebAssembly backends. Also,
+I've been experimenting with my own Haskell compiler, which is good enough
+for simple web games.
+
 == JavaScript FFI ==
 
 Calling Haskell functions from JavaScript and vice versa is painless.
@@ -181,7 +186,7 @@ function genEv() {
 == Big data ==
 
 I gave up trying to embed a neural network and some test cases in
-link:../haskell/brain.html[a handwritten digit recogniition demo].
+link:../haskell/brain.html[a handwritten digit recognition demo].
 
 I tried defining a giant list in Haskell. I tried a routine to fetch and read
 a text file. In the end I was forced to write some JavaScript.
