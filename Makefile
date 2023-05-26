@@ -13,7 +13,7 @@ netwalk.html:netwalk.lhs menu.html;stitch book menu $<
 COMPILER=compiler
 netwalk.c:netwalk.lhs;(cat $(COMPILER)/inn/BasePrecisely.hs $(COMPILER)/inn/SystemWasm.hs $(COMPILER)/inn/Map1.hs ; $(COMPILER)/unlit < $<) | $(COMPILER)/precisely wasm > $@
 %.o: %.c; clang --target=wasm32 -O2 -ffreestanding -c $^ -o $@
-%.wasm: %.o; wasm-ld --import-undefined --no-entry --initial-memory=41943040 $^ -o $@
+%.wasm: %.o; wasm-ld --import-undefined --no-entry --initial-memory=838860800 $^ -o $@
 
 menu.html: menu ; stitch menu $<
 %.html : %.lhs menu.html ; stitch book menu $<

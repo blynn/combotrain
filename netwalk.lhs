@@ -240,7 +240,7 @@ lacks these, and we have no wish to add them for now.
 
 Our compiler also lacks a nice way to call Haskell closures from JavaScript.
 We concoct an ad hoc string-based scheme based on the `get_global()` and
-`set_global()` funcitons of our RTS.
+`set_global()` functions of our RTS.
 
 The game state is stored in an `IORef` pair consisting of the board and the
 list of packets being animated. The latter is non-empty if and only if the

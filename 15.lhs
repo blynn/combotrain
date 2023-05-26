@@ -70,9 +70,9 @@ compilers.
 For picking a random permutation uniformly, we could import
 https://hackage.haskell.org/package/random-shuffle[System.Random.Shuffle], but
 instead we implement our own to illustrate a point. The typical imperative
-solution repeatedly swaps memory contents chosen from certain ranges and runs in
-linear time. Although pure code is forbidden from such swaps, we can replace an
-array of memory cells with a `Data.Map` that maps memory indexes to data
+solution repeatedly swaps memory contents chosen from certain ranges and runs
+in linear time. Although pure code is forbidden from such swaps, we can replace
+an array of memory cells with a `Data.Map` that maps memory indexes to data
 contents.  This sort of thing is based on trees, thus the running time
 increases by a logarithmic factor.
 
@@ -80,14 +80,14 @@ Thus in general, we can construct a
 https://en.wikipedia.org/wiki/Persistent_data_structure[persistent] version of
 a data structure by paying at most a logarithmic factor.
 
-Hopefully it is clear our shuffling routine has $O(N \log N)$ complexity. This
-matches `System.Random.Shuffle`, but likely has a far higher constant factor
-because a `Data.Map` is intended for more than just shuffling.
+Hopefully it is clear our shuffling routine has \(O(N \log N)\) complexity.
+This matches `System.Random.Shuffle`, but likely has a far higher constant
+factor because a `Data.Map` is intended for more than just shuffling.
 
 On a related note, a C programmer would represent a 2D board with an array. A
 straightforward translation to Haskell is inefficient, because any array update
 creates a fresh copy of the entire array. Better to use a map; to update a map
-of $N$ entries only costs $O(\log N)$ more space.
+of \(N\) entries only costs \(O(\log N)\) more space.
 
 \begin{code}
 import qualified Data.Map.Strict as M
