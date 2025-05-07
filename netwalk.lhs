@@ -92,6 +92,10 @@ aye = 0 :+ 1
 
 A 90-degree rotation is then simply multiplication by `aye`.
 
+\begin{code}
+take 5 $ iterate (aye*) 1
+\end{code}
+
 We define handy functions for getting at the coordinates, along with a
 mathematicaly obscene ordering on our Gaussian integers so they can be used as
 keys in a `Map`.

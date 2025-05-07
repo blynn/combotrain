@@ -3,9 +3,9 @@ target: all
 
 SHELL=/bin/bash -o pipefail
 
-HSFILES=tictactoe breakthrough peg chess index redcode 15
+HSFILES=tictactoe breakthrough peg chess index redcode
 
-RUNMES=netwalk
+RUNMES=netwalk 15
 $(foreach x,$(RUNMES),$(x).html):%.html:%.run
 RUNFILES=$(addsuffix .lhs, $(RUNMES)) $(addsuffix .html, $(RUNMES))
 
@@ -30,8 +30,3 @@ git-push: ; git push git@github.com:blynn/combotrain.git master
 sync: all; rsync $(SITEFILES) crypto.stanford.edu:www/play/
 
 15 : 15-sdl.hs ; ghc $^
-
-asterius/15.wasm asterius/15.js: 15.lhs
-	mkdir -p asterius
-	cp 15.lhs asterius/
-	podman run -it --rm -v `pwd`/asterius:/mirror -w /mirror terrorjack/asterius:latest ahc-link --bundle --browser --ghc-option -O --input-hs 15.lhs
