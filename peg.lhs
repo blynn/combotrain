@@ -2,88 +2,114 @@
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script src="peg.js"></script>
 <canvas id="canvas" width="280" height="280" style="display:block;margin:auto;">
 </canvas>
+<script id="jsglue">"use strict";
+const ctx = canvas.getContext("2d");
+function spot(x, y, r, sty) {
+  ctx.fillStyle = sty;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 2*Math.PI); ctx.fill();
+}
+function smiley(x, y, r) {
+  ctx.fillStyle = 'rgb(255,255,255)';
+  ctx.beginPath(); ctx.arc(x-r/4, y-r/4, 1.5, 0, 2*Math.PI); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+r/4, y-r/4, 1.5, 0, 2*Math.PI); ctx.fill();
+
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgb(255,255,255)';
+  ctx.beginPath(); ctx.arc(x, y, r/2, 1/6*Math.PI, 5/6*Math.PI); ctx.stroke();
+}
+function initGame(repl) {
+  function run(s) { repl.run("chat", ["Main"], s); }
+  canvas.addEventListener("mousedown", (ev) => { run("click " + ev.offsetX + " " + ev.offsetY); });
+}
+</script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Half our imports are for the user interface:
+We represent the board with a `Map` from a pair of ints to a boolean.
+The only other state we need is the current selected peg, if there is one.
 
 \begin{code}
-import Control.Monad
-import Data.Bool
-import Data.IORef
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
-import Data.Maybe
-import Haste.DOM
-import Haste.Events
-import Haste.Graphics.Canvas
+jsEval "curl_module('../compiler/Map.ob')"
 \end{code}
 
-Setting up the board and acting on the selection of a row and column is
-just a handful of lines:
-
 \begin{code}
-initState :: Map (Int, Int) Bool
-initState = let f x = (x - 3)^2 <= 1 in M.fromList
+import Map
+initBoard :: Map (Int, Int) Bool
+initBoard = let f x = (x - 3)^2 <= 1 in fromList
   [((r, c), r /= 3 || c /= 3) | r <- [0..6], c <- [0..6], f r || f c]
 
 act :: (Map (Int, Int) Bool, Maybe (Int, Int)) -> (Int, Int)
     -> (Map (Int, Int) Bool, Maybe (Int, Int))
 act (st, sel) p@(r, c)
-  | M.notMember p st = (st, Nothing)
-  | Nothing <- sel   = (st, if st M.! p then Just p else Nothing)
-  | p' == p          = (st, Nothing)
-  | st M.! p         = (st, Just p)
-  | (r' - r)^2 + (c - c')^2 == 4, st M.! m = (M.insert p' False $
-    M.insert p True $ M.insert m False st, Just p)
-  | otherwise        = (st, Nothing)
+  | not $ member p st = (st, Nothing)
+  | Nothing <- sel    = (st, if st ! p then Just p else Nothing)
+  | p' == p           = (st, Nothing)
+  | st ! p            = (st, Just p)
+  | (r' - r)^2 + (c - c')^2 == 4, st ! m = (insert p' False $
+    insert p True $ insert m False st, Just p)
+  | otherwise         = (st, Nothing)
   where Just p'@(r', c') = sel
         m = (div (r + r') 2, div (c + c') 2)
 \end{code}
 
-The rest of the program deals with drawing the board and handling user input:
+This page contains JavaScript helpers to draw on the canvas and add event
+listeners once our Haskell is compiled:
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<pre id="showglue"></pre>
+<script>showglue.innerText = jsglue.innerText</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+We write code to draw the board, with a bigger circle around the selected peg
+if it exists. If there is only one peg remaining and it lies in the center,
+then we draw a smiley face on it.
 
 \begin{code}
-sz :: Int
-sz = 40
-rad :: Double
-rad = 12
+sz = 40 :: Int
+rad = 12 :: Double
+mid = div sz 2
 
-spot :: (Int, Int) -> Double -> Picture ()
-spot (r, c) t = let m = div sz 2 in fill $
-  circle (fromIntegral (sz*c + m), fromIntegral (sz*r + m)) t
+jsEval_ = (*> pure ()) . jsEval
 
-pegPic :: ((Int, Int), Bool) -> Picture ()
-pegPic (p, b) = color (RGB (bool 0 255 b) 0 0) $ spot p rad
-
-victory :: Canvas -> Map (Int, Int) Bool -> IO ()
-victory canvas st = when
-  (M.filterWithKey (const id) st == M.singleton (3, 3) True) $ do
-  let
-    m = div sz 2
-    [ox, oy] = fromIntegral <$> [sz*3 + m, sz*3 + m]
-  renderOnTop canvas $ color (RGB 255 255 255) $ sequence_ [
-    fill $ circle (ox - rad/4, oy - rad/4) 1.5,
-    fill $ circle (ox + rad/4, oy - rad/4) 1.5,
-    lineWidth 2 $ stroke $ arc (ox, oy) (rad/2) (1/6*pi) (5/6*pi)]
-
-paint :: Canvas -> (Map (Int, Int) Bool, Maybe (Int, Int)) -> IO ()
-paint canvas (st, sel) = do
-  render canvas $ case sel of
-    Just p -> color (RGB 127 255 255) $ spot p $ rad + 3
+drawPeg ((x, y), b) = do
+  jsEval_ $ concat
+    [ "spot(", show (mid+x*sz), ", ", show (mid+y*sz), ", ", show rad
+    , ", 'rgb(", show $ bool 0 255 b, ",0,0)');"
+    ]
+  
+draw (board, sel) = do
+  jsEval_ "ctx.clearRect(0, 0, canvas.width, canvas.height);"
+  case sel of
+    Just (x, y) -> jsEval_ $ concat
+      [ "spot(", show (mid+x*sz), ", ", show (mid+y*sz), ", ", show $ rad + 4
+      , ", 'rgb(0,127,0)');"
+      ]
     Nothing -> pure ()
-  void $ renderOnTop canvas $ mapM pegPic $ M.assocs st
-  victory canvas st
+  mapM drawPeg $ assocs board
+  when (map fst (filter snd $ assocs board) == [(3, 3)]) do
+    jsEval_ $ concat
+      [ "smiley(", show $ mid + 3*sz, ", ",  show $ mid + 3*sz
+      , ", ", show rad, ");"
+      ]
+\end{code}
 
-main :: IO ()
-main = withElems ["canvas"] $ \[cElem] -> do
-  Just canvas <- fromElem cElem
-  ref <- newIORef (initState, Nothing)
-  let refresh = readIORef ref >>= paint canvas
+We make the board and selection available to all `IO` functions:
+
+\begin{code}
+refresh = global >>= draw
+
+newGame = setGlobal (initBoard, Nothing) *> refresh
+
+click x y = do
+  g <- global
+  setGlobal $ act g (div x sz, div y sz)
   refresh
-  void $ cElem `onEvent` MouseDown $ \(MouseData (x, y) _ _) -> do
-    modifyIORef ref (`act` (div y sz, div x sz))
-    refresh
+\end{code}
+
+Let's roll!
+
+\begin{code}
+newGame
+jsEval_ "initGame(repl);"
 \end{code}
