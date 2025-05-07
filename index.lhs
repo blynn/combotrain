@@ -3,203 +3,162 @@
 http://benlynn.blogspot.com/2014/07/15-shades-of-grey_29.html[Inspired by a
 talk by John Carmack]
 [http://benlynn.blogspot.com/2014/08/let-code.html[follow-up post]], I wrote
-these browser games in Haskell. I used the http://haste-lang.org/[Haste
-compiler] to solve https://wiki.haskell.org/The_JavaScript_Problem[the
-JavaScript problem].
+some browser games in Haskell.
 
-I chose Haste because https://github.com/ghcjs/ghcjs[GHCJS] seemed tough to
-install at the time.
+To solve https://wiki.haskell.org/The_JavaScript_Problem[the JavaScript
+problem], I initially used the http://haste-lang.org/[Haste compiler]. The
+https://github.com/ghcjs/ghcjs[GHCJS] compiler seemed heavyweight and tough to
+install.
 
-I could mostly pretend it was Haskell as usual, though some differences
-arose.
+It worked great. I could mostly pretend it was Haskell as usual. Sadly, the
+Haste compiler appears to be abandoned now. The good news is that GHC is
+gaining JavaScript and WebAssembly backends.
 
-Sadly, the Haste compiler appears to be abandoned now. On the other hand,
-it looks like GHC is gaining JavaScript and WebAssembly backends. Also,
-I've been experimenting with my own Haskell compiler, which is good enough
-for simple web games.
+I would migrate to GHC, but my goals have shifted over time. Simple games ought
+to simple to write. For toy programs, there should be no need for setting up
+complex development environments and lengthy compile times and lengthy
+boilerplate.
 
-== JavaScript FFI ==
+== Plug and play ==
 
-Calling Haskell functions from JavaScript and vice versa is painless.
-We'll demonstrate calling Haskell from JavaScript and vice versa:
+When a game is sufficiently short and sweet, I use a version of
+link:../compiler/[my own Haskell compiler] because of some features:
+
+  * Zero-install. The webpage loads a wasm binary version of my compiler and runs it on the code within.
+  * Helpers to support global variables, which are slightly less unprincipled than `unsafePerformIO` with `newIORef`. This suits the event-driven nature of the DOM, as we can spread code among many top-level functions rather than stuff everything into a single main function.
+  * Interactive REPL. Anyone can edit and run the code on the page (though of course changes cannot be saved).
+  * Module fetching. There is a way to fetch object files elsewhere on my website and import their definitions. This is allowed anywehere, so I no longer have to start every program with a series of imports.
+  * In the same vein, my compiler uses my preferred language options so I no longer have to declare them at the start.
+
+Our code hits the ground running. For example, the following computes the 100th
+Fibonacci number. You can edit it and run it again: click the button or press
+Ctrl-Enter. Pressing Alt-Enter will run it and give you a new box to add more
+code, with access to all previous definitions.
+
+\begin{code}
+fibs=0:1:zipWith (+) fibs (tail fibs)
+fibs !! 100
+\end{code}
+
+== Back to BASICs ==
+
+In my offline childhood, source code was hard to come by, so I was always
+elated if I saw https://usborne.com/us/books/computer-and-coding-books[computer
+programming books published by Usborne in the 1980s] at my local library.
+
+Let's see how difficult it is to remake some of these games. We use
+http://www.masswerk.at/termlib/[termlib] and a funny font to simulate an old
+computer. We define versions of common BASIC commands. Since `print` is a
+Haskell keyword, we use `output` instead of `PRINT`, and also define `outputs`,
+which prints a list of strings.
+
+There is an awkward mismatch with the `INPUT` command due to the asynchronous
+nature of the DOM. We work around this by defining `input` to take a
+continuation as an argument. Our `delay` function is similar. In both cases,
+we abuse the `global` and `setGlobal` hacks to store continuations. This means
+there is a race condition, though it's difficult to trigger.
+
+\begin{code}
+jsEval_ = (*> pure ()) . jsEval
+
+rand n = fromInteger . readInteger <$> jsEval ("Math.floor(Math.random() * " ++ show n ++ ");")
+
+cls = jsEval_ "term.clear();"
+output s = jsEval_ $ "term.write(`" ++ s ++ "\n`);"
+outputs = mapM_ output
+
+input cont = do
+  jsEval "term.prompt();"
+  setGlobal cont
+
+inputCont s = global >>= ($ toUpper <$> s)
+
+delay t cont = do
+  setGlobal cont
+  jsEval_ $ "setTimeout(() => run('delayCont'), " ++ show t ++ ");"
+
+delayCont = global >>= id
+
+toUpper c
+  | 'a' <= c && c <= 'z' = chr $ n - 32
+  | otherwise = c
+  where n = ord c
+\end{code}
+
+Now for the fun part: we convert the BASIC of yesteryear to Haskell.
+Let's take Spiderwoman from
+https://drive.google.com/file/d/0B2Z4GOoRXHWUVzBtTmxpV09NWFk/view?resourcekey=0-MTEoOx2EfESeq0ZBKvx25Q[Creepy
+Computer Games], where Spiderwoman is thinking of a letter that the player must
+guess by typing in words.
+
+\begin{code}
+lose = output "YOU ARE NOW A FLY"
+
+play g choice = do
+  outputs ["", "TRY A WORD", "", ""]
+  input check
+  where
+  next = play (g + 1) choice
+  check w
+    | length w < 4 || length w > 8 = next
+    | choice `elem` w = do
+      outputs ["YES - IT'S ONE OF THOSE", "", "DO YOU WANT TO GUESS ? (Y OR N)"]
+      input \r -> if r == "N" then cls *> next else do
+        outputs ["", "WHAT IS YOUR GUESS THEN ? "]
+        input \g -> if g /= [choice] then lose else
+            outputs ["OK - YOU CAN GO", "(THIS TIME)"]
+    | otherwise = do
+      outputs ["", "IT'S NOT IN THAT WORD"]
+      delay 500 $ cls *> if g > 15
+        then output "YOU ARE TOO LATE" *> lose
+        else next
+
+spiderwoman = do
+  cls
+  outputs ["SPIDERWOMAN", "HAS CHOSEN"]
+  play 1 =<< (['A'..'Z']!!) <$> rand 26
+\end{code}
+
+We write some glue code to connect HTML elements to our code:
+
+\begin{code}
+jsEval_ "initSpiderwoman(repl);"
+jsEval_ "spiderwoman.addEventListener('click', ev => run('spiderwoman'));"
+spiderwoman
+\end{code}
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=Sixtyfour&display=swap" rel="stylesheet">
 <style type="text/css">
 .term {
-  font-family: 'Inconsolata', monospace;
-  font-size: 90%;
-  color: #00aa00;
+  font-family: 'Sixtyfour', monospace;
+  color: #00ff00;
   background: #000000;
 }
 .term .termReverse {
-  background: #00aa00;
+  background: #00ff00;
   color: #000000;
 }
 table { margin: 0; }
 </style>
-<script type="text/javascript" src="/~blynn/termlib.js"></script>
-<script type="text/javascript">
-var term = new Terminal( {handler: termHandler, greeting:
-  'Try typing: foo "quotes!!11!" 42 3.1415 and 9e3',
-  cols: 48, rows: 16} );
-function termHandler() {
-  this.newLine();
-  var line = Haste.wow(this.lineBuffer);
-  if (line != "") this.write(line);
-  this.prompt();
-}
-function termOpen() { term.open(); }
-</script>
+<script src="/~blynn/termlib.js"></script>
+<button id="spiderwoman">REDO FROM START</button>
 <div id="termDiv"></div>
-<script type="text/javascript" src="index.js"></script>
+<script>
+let run;
+let term;
+function initSpiderwoman(repl) {
+  term = new Terminal( {handler: termHandler, greeting: '',
+    ps: '?', cols: 40, rows: 25} );
+  run = (s) => repl.run("chat", ["Main"], s);
+  function termHandler() {
+    this.newLine();
+    run("inputCont [r|" + this.lineBuffer + "|]");
+  }
+  term.open();
+}
+</script>
+<br>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Let's walk through the details.
-
-Strings are a constant source of friction, as JavaScript and Haskell have
-represent them differently. (In fact, Haskell has many representations, and
-its most well-known one, `String`, is often terrible.)
-
-Enabling the `OverloadedStrings` extension marginally reduces the number
-of conversions between `String` and `JSString`.
-
-\begin{code}
-{-# LANGUAGE OverloadedStrings #-}
-import Data.List
-import Data.Maybe
-import Haste.Foreign
-import Haste.Prim
-\end{code}
-
-Our demo features
-https://www.reddit.com/r/haskell/comments/3r75hq/blow_my_mind_in_one_line/[a mind-blowing
-Haskell one-liner], the function `readMany`, which extracts readable
-Haskell values of a given type. The `wow` functions calls it to extract values
-of type `Int`, `Double` and `String` from a given `JSString`, and shows the
-results in a `JSString`.
-
-We call `ffi` to grant our code access to the JavaScript `termOpen` function,
-which opens the terminal. The type declaration here is mandatory.
-
-The `export` function performs the converse, that is, grants JavaScript access
-to our `wow` function.
-
-\begin{code}
-readMany :: Read a => String -> [a]
-readMany = unfoldr $ listToMaybe . concatMap reads . tails
-
-wow :: JSString -> JSString
-wow js = let s = fromJSStr js in toJSStr $ unlines $ [
-  "Ints:    " ++ show (readMany s :: [Int]),
-  "Doubles: " ++ show (readMany s :: [Double]),
-  "Strings: " ++ show (readMany s :: [String])]
-
-main :: IO ()
-main = do
-  export "wow" wow
-  ffi "termOpen" :: IO ()
-\end{code}
-
-The above ties in with the JavaScript below. The `termlib.js` refers to the
-excellent http://www.masswerk.at/termlib/[termlib] JavaScript library.
-
-[source,html]
-------------------------------------------------------------------------------
-<style type="text/css">
-.term {
-  font-family: 'Inconsolata', monospace;
-  font-size: 90%;
-  color: #00aa00;
-  background: #000000;
-}
-.term .termReverse {
-  background: #00aa00;
-  color: #000000;
-}
-table { margin: 0; }
-</style>
-<script type="text/javascript" src="/~blynn/termlib.js"></script>
-<script type="text/javascript">
-var term = new Terminal( {handler: termHandler, greeting:
-  'Try typing: foo "quotes!!11!" 42 3.1415 and 9e3',
-  cols: 48, rows: 16} );
-function termHandler() {
-  this.newLine();
-  var line = Haste.wow(this.lineBuffer);
-  if (line != "") this.write(line);
-  this.prompt();
-}
-function termOpen() { term.open(); }
-</script>
-<div id="termDiv"></div>
-<script type="text/javascript" src="index.js"></script>
-------------------------------------------------------------------------------
-
-== Threads ==
-
-https://developer.mozilla.org/en/docs/Web/JavaScript/EventLoop[JavaScript is
-single-threaded], in the sense that a function is run to completion before
-another begins. There is a implicit event loop running the show.
-
-Redraws only occur when control is returned to the event loop, which can
-require sending timeout events.
-
-When programming with libraries such as SDL, we manage multiple threads,
-and redraws are under our control. This might make it challenging for a
-browser game and a Linux game to share code, though I've only explored this
-briefly. Perhaps writing an event loop to mimic JavaScript is the easiest
-solution.
-
-An alternative may be `Haste.Concurrent`, which appears to simulate multiple
-threads in JavaScript.
-
-== HTML Canvas ==
-
-Experience with SDL helps somewhat with drawing to a canvas element. For
-example, `createRGBSurface` is analagous to `createCanvas`.
-
-On the other hand, instead of pixels with integer coordinates, the canvas
-uses points with floating point coordinates.
-
-== UI woes ==
-
-Haste has limited support for HTML events. For an
-link:../haskell/enigmalhtml[Enigma machine simulation],
-I wanted to intercept
-https://developer.mozilla.org/en-US/docs/Web/Events/input[the input event].
-The Haste API lacks this event.
-
-I worked around the problem by writing a snippet of JavaScript to fire off a
-scroll event on an input event, which Haste does recognize:
-
-------------------------------------------------------------------------------
-<script type="text/javascript">
-var ev = new Event('scroll');
-function genEv() {
-  document.getElementById("grundstellung").dispatchEvent(ev);
-}
-</script>
-<textarea oninput="genEv();"></textarea>
-------------------------------------------------------------------------------
-
-== Big data ==
-
-I gave up trying to embed a neural network and some test cases in
-link:../haskell/brain.html[a handwritten digit recognition demo].
-
-I tried defining a giant list in Haskell. I tried a routine to fetch and read
-a text file. In the end I was forced to write some JavaScript.
-
-== haste-cabal ==
-
-For a long time, I thought I was confined to the packages bundled with Haste.
-
-On the contrary, by running `haste-cabal`, we can use many packages in our
-JavaScript programs:
-
-------------------------------------------------------------------------------
-$ haste-cabal update
-$ haste-cabal install random
-$ haste-cabal install parsec
-------------------------------------------------------------------------------

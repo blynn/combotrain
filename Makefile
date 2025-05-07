@@ -3,9 +3,9 @@ target: all
 
 SHELL=/bin/bash -o pipefail
 
-HSFILES=tictactoe breakthrough chess index redcode
+HSFILES=tictactoe breakthrough chess redcode
 
-RUNMES=netwalk 15 peg
+RUNMES=netwalk 15 peg index
 $(foreach x,$(RUNMES),$(x).html):%.html:%.run
 RUNFILES=$(addsuffix .lhs, $(RUNMES)) $(addsuffix .html, $(RUNMES))
 
