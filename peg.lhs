@@ -4,6 +4,7 @@
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <canvas id="canvas" width="280" height="280" style="display:block;margin:auto;">
 </canvas>
+<button id="newgame" style="display:block;margin:auto;">New Game</button>
 <script id="jsglue">"use strict";
 const ctx = canvas.getContext("2d");
 function spot(x, y, r, sty) {
@@ -22,6 +23,7 @@ function smiley(x, y, r) {
 function initGame(repl) {
   function run(s) { repl.run("chat", ["Main"], s); }
   canvas.addEventListener("mousedown", (ev) => { run("click " + ev.offsetX + " " + ev.offsetY); });
+  newgame.addEventListener("click", (ev) => run("newGame"));
 }
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -69,8 +71,6 @@ then we draw a smiley face on it.
 sz = 40 :: Int
 rad = 12 :: Double
 mid = div sz 2
-
-jsEval_ = (*> pure ()) . jsEval
 
 drawPeg ((x, y), b) = do
   jsEval_ $ concat

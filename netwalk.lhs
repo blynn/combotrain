@@ -10,21 +10,14 @@ Connect all terminals to the server.
 <br>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-I rewrote the source for this game, because the first version seemed out of
-place because it was strongly influenced by my C version targeting SDL. I also
-switched to my own Haskell compiler; orignally I targeted the Haste compiler
-but this project no longer seems active.
-
 == Random Number Generator ==
 
-Instead of a library, we roll our own pseudo-random number generator, which
-gives us an excuse to learn about
-https://www.pcg-random.org/index.html[_permuted congruential generators_].
-Although PRNGs based on those of
+We roll our own pseudo-random number generator, which gives us an excuse to
+learn about https://www.pcg-random.org/index.html[_permuted congruential
+generators_]. Although PRNGs based on those of
 https://www.pcg-random.org/posts/bob-jenkins-small-prng-passes-practrand.html[Bob
-Jenkins]
-may suit us just fine, a PCG is easier to code, and perhaps also easier to
-comprehend.
+Jenkins] may suit us just fine, a PCG is easier to code, and perhaps also
+easier to comprehend.
 
 We choose PCG-XSH-RR with 64-bit state and 32-bit output, which is just like a
 venerable linear congruential generator except we twiddle the bits of the
@@ -223,7 +216,7 @@ drawTile lives (z@(x :+ y), ws) = do
 cctx.strokeStyle = "rgb(|] ++ (if isLive then "0,191,0" else "255,127,127") ++ [r|)";
 cctx.strokeRect(|] ++ intercalate "," (show <$> [ox, oy, 16*dx, 16*dy]) ++ [r|);
 |]) ws
-  when (length ws == 1) $ (*> pure ()) $ jsEval $ [r|
+  when (length ws == 1) $jsEval_ $ [r|
 cctx.drawImage(|] ++ (if isLive then "liveEnd" else "deadEnd") ++ ", " ++ show (32*x) ++ "," ++ show (32*y) ++ [r|);
 |]
   where
@@ -232,10 +225,8 @@ cctx.drawImage(|] ++ (if isLive then "liveEnd" else "deadEnd") ++ ", " ++ show (
   isLive = member z lives
 \end{code}
 
-Unlike our previous version, we draw some images wtih JavaScript and assign
-to variables such as `liveEnd`, `deadEnd`, and `backlayer`. The Haste compiler
-is bundled with wrappers for routines that drew on an HTML canvas; our compiler
-lacks these, and we have no wish to add them for now.
+We draw images wtih JavaScript and assign them to variables such as `liveEnd`,
+`deadEnd`, and `backlayer`.
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script id='jsglue'>"use strict";
@@ -293,12 +284,7 @@ gluediv.innerText = jsglue.innerText;
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-Traditionally, there is a single main function which is called when a program
-starts, and when it ends, so does the program. However, we desire a more
-web-friendly execution model, where state persists between function calls that
-are invoked by triggering various events on a webpage. We do so by using
-`global` and `setGlobal` functions produced by our compiler to preserve a
-`GameState` value.
+The following data structure holds the game state.
 
 \begin{code}
 data GameState = GameState
@@ -309,10 +295,9 @@ data GameState = GameState
   }
 \end{code}
 
-This time around, instead of setting timers to go off every 20 milliseconds (at
-most) and always painting the next frame, we call `requestAnimationFrame()`.
-This is more complex, as the frame we paint depends on the time elapsed since
-the previous call, but produces better animations.
+We animate via `requestAnimationFrame()`. This is more complex, as the frame
+we paint depends on the time elapsed since the previous call, but produces
+better animations.
 
 \begin{code}
 newGame = do
@@ -331,11 +316,9 @@ update board = do
     then do
       board <- pure $ insert rootTop (aye : board!rootTop) $ insert rootBot (-aye : board!rootBot) board
       setGlobal gst { _board = board, _packets = newPacketCheck board [] }
-      jsEval "sctx.drawImage(canvas, 0, 0);"
-      jsEval "af = window.requestAnimationFrame(animate);"
-      pure ()
+      jsEval_ "sctx.drawImage(canvas, 0, 0);"
+      jsEval_ "af = window.requestAnimationFrame(animate);"
     else setGlobal gst { _board = board }
-  pure ()
 
 click mx my = do
   let z = mx `div` 32 :+ my `div` 32
@@ -363,8 +346,7 @@ animate now = let
     _tick <$> global >>= maybe (step 0) \t0 -> do
       let delta = div (fromIntegral $ now - t0) 20
       when (delta > 0) $ step delta
-    jsEval "af = window.requestAnimationFrame(animate);"
-    pure ()
+    jsEval_ "af = window.requestAnimationFrame(animate);"
 
 main = do
   jsEval "initGame(repl);"

@@ -96,13 +96,7 @@ gen = do
   if parity z `mod` 2 == 0 then pure z else gen
 \end{code}
 
-== Paint me a picture ==
-
-Our compiler has non-standard `global` and `setGlobal` functions which
-keep track of the game state, so that rather than write one giant `main`
-function, we can write many little functions that are invoked on various
-events. This suits web widgets. The following data structure holds the
-game state, which we store globally.
+The game state.:
 
 \begin{code}
 data Anim = Anim Int (Int, Int) (Int, Int)
@@ -122,7 +116,6 @@ showglue.innerText = jsglue.innerText;
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-
 A function to draw the current position:
 
 \begin{code}
@@ -131,7 +124,6 @@ rgb r g b = concat ["rgb(", show r, ",", show g, ",", show b, ")"]
 getColour n = rgb x x x where
   x | n == hole = 0
     | otherwise = 255 - (225 * (n - 1) `div` (side^2 - 1))
-jsEval_ = (*> pure ()) . jsEval
 square x y c = jsEval_ $ concat
   [ "rect(", show x, ", ", show y, ", ", show sz, ", ", show sz, ", ", show c, ");" ]
 draw b = flip mapM_ (zip [0..] b) $ \(i, n) -> let
