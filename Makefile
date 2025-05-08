@@ -3,13 +3,13 @@ target: all
 
 SHELL=/bin/bash -o pipefail
 
-HSFILES=tictactoe breakthrough chess redcode
+HSFILES=breakthrough chess redcode
 
-RUNMES=netwalk 15 peg index
+RUNMES=netwalk 15 peg index tictactoe
 $(foreach x,$(RUNMES),$(x).html):%.html:%.run
 RUNFILES=$(addsuffix .lhs, $(RUNMES)) $(addsuffix .html, $(RUNMES))
 
-SITEFILES=$(RUNFILES) $(addsuffix .html, $(HSFILES)) $(addsuffix .js, $(HSFILES)) xo.png
+SITEFILES=$(RUNFILES) $(addsuffix .html, $(HSFILES)) $(addsuffix .js, $(HSFILES))
 
 HS2JS=-mv Main.jsmod /tmp; hastec -Wall --opt-all
 
