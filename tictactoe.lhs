@@ -109,7 +109,7 @@ gameTree (Game
   ,0,-1,0] Play 1)
 \end{code}
 
-== Best of the worst ==
+== Best worst-case ==
 
 The idea behind minimax comes naturally to gamers. If both players are playing
 optimally, and know that their opponent is playing optimally, then we should

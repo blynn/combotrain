@@ -1,35 +1,3 @@
 = Browser Games =
 
 https://crypto.stanford.edu/~blynn/play/[Play now!]
-
- * 15-puzzle: Grey squares instead of numbers.
- * Tic Tac Toe: Human moves first. Computer opponent minimaxes the full game
- tree with no pruning, which is tolerable on modern systems.
- * Netwalk: Rewrite of https://code.google.com/p/netwalk/[my C implementation
- of a puzzle game].
- * Chess: Searches a few ply. Evaluation function only scores material.
- * Breakthrough: Searches a few ply. Evaluation function only scores material.
- * Peg Solitaire: English board.
-
-== Building web demos ==
-
-The Makefile calls a custom tool that is not included. Instead, run:
-
-------------------------------------------------------------------------------
-$ hastec 15.lhs
-$ sed 's/^\\.*{code}$/-----/' 15.lhs | asciidoc -o - - > 15.html
-------------------------------------------------------------------------------
-
-== Haste ==
-
-Haste is getting old, so only works with older packages:
-
-------------------------------------------------------------------------------
-$ haste-cabal update
-$ haste-cabal install parsec-3.1.11
-$ haste-cabal install random-shuffle-0.0.2
-------------------------------------------------------------------------------
-
-Note to self: on NixOS, to get `haste-cabal` working, I had to run a
-`nix-shell` with an FHS environment with `libz.so.1` soft-linked to the
-subdirectory containing `haste-cabal.bin`.

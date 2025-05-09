@@ -45,26 +45,26 @@ initGame = Game initBoard Play 1 Nothing Nothing undefined
 score game = if state game == Won then player game * (-1024) else
   (-1) * sum [(board game)!i | i <- range bnds]
 
-omitWith op ((g, ns):nss) = let
-  omit pot [] = []
-  omit pot ((g, ns):nss) | or $ map (`op` pot) ns = omit pot nss
-                         | otherwise = (g, last ns) : omit (last ns) nss
-  in (g, last ns) : omit (last ns) nss
+omitWith op (ms:mss) = m : omit m mss where
+  oppest = foldr1 (\a b -> if op a b then a else b)
+  m = oppest ms
+  omit _   [] = []
+  omit pot (ns:nss) | any (`op` pot) ns = omit pot nss
+                    | otherwise = n : omit n nss
+                    where n = oppest ns
 
-maximize' :: Tree Game -> [(Game, Int)]
-maximize' (Node leaf []) = [(undefined, score leaf)]
-maximize' (Node _ kids) = omitWith (<=) $
-  [(rootLabel k, map snd $ minimize' k) | k <- kids]
+maximize' :: Tree Game -> [Int]
+maximize' (Node leaf [])   = [score leaf]
+maximize' (Node _    kids) = omitWith (<=) $ minimize' <$> kids
 
-maximize = last . maximize'
+minimize' :: Tree Game -> [Int]
+minimize' (Node leaf [])   = [score leaf]
+minimize' (Node _    kids) = omitWith (>=) $ maximize' <$> kids
 
-minimize' :: Tree Game -> [(Game, Int)]
-minimize' (Node leaf []) = [(undefined, score leaf)]
-minimize' (Node _ kids) = omitWith (>=) $
-  [(rootLabel k, map snd $ maximize' k) | k <- kids]
-
-best game ms = lastMove $ fst $ maximize $ prune 4 $
-  Node game (map (gameTree . move game) ms)
+best game ms = snd $ foldr1 go $ zip (minimum . minimize' . prune 3 . gameTree <$> gs) ms
+  where
+  gs = move game <$> ms
+  go a b = if fst a > fst b then a else b
 
 gameTree = unfoldTree (\x -> (x, nextNodes x))
 
