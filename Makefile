@@ -5,7 +5,7 @@ SHELL=/bin/bash -o pipefail
 
 HSFILES=breakthrough chess redcode
 
-RUNMES=netwalk 15 peg index tictactoe
+RUNMES=netwalk 15 peg index tictactoe basic
 $(foreach x,$(RUNMES),$(x).html):%.html:%.run
 RUNFILES=$(addsuffix .lhs, $(RUNMES)) $(addsuffix .html, $(RUNMES))
 

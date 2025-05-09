@@ -5,50 +5,6 @@ talk by John Carmack]
 [http://benlynn.blogspot.com/2014/08/let-code.html[follow-up post]], I wrote
 some browser games in Haskell.
 
-To solve https://wiki.haskell.org/The_JavaScript_Problem[the JavaScript
-problem], I initially used the http://haste-lang.org/[Haste compiler]. The
-https://github.com/ghcjs/ghcjs[GHCJS] compiler seemed heavyweight and tough to
-install. It worked great. I could mostly pretend it was Haskell as usual.
-
-Sadly, Haste appears to be abandoned. The good news is that GHC is gaining
-JavaScript and WebAssembly backends. I would migrate, but my goals have
-shifted. Simple games ought to be simple to write. For toy programs, there
-should be no need for setting up complex development environments and lengthy
-compile times and lengthy boilerplate.
-
-== Plug and play ==
-
-When a game is sufficiently short and sweet, I use a version of
-link:../compiler/[my own Haskell compiler] because of some features:
-
-  * Zero-install. The webpage loads a wasm binary version of my compiler and
-  runs it on the code within.
-
-  * Helpers for global variables. Our `global` and `setGlobal` functions are
-  slightly less unprincipled than `unsafePerformIO` with `newIORef`. This suits
-  the event-driven nature of the DOM, as we can spread code among many
-  top-level functions rather than stuff everything into a single main function.
-
-  * Interactive REPL. Anyone can edit and run the code on the page (though of
-  course changes cannot be saved).
-
-  * Module fetching. Even halfway through a program we can fetch object files
-  elsewhere on my website and import their definitions. I no longer need to
-  start every program with a series of imports.
-
-  * In the same vein, my compiler uses my preferred language options so I no *
-  longer have to declare them at the start.
-
-Our code hits the ground running. For example, the following computes the 100th
-Fibonacci number. You can edit it and run it again: click the button or press
-Ctrl-Enter. Pressing Alt-Enter will run it and give you a new box to add more
-code, with access to all previous definitions.
-
-\begin{code}
-fibs=0:1:zipWith (+) fibs (tail fibs)
-fibs !! 100
-\end{code}
-
 == Back to BASICs ==
 
 [pass]
@@ -189,4 +145,48 @@ jsEval_ "initSpiderwoman(repl);"
 jsEval_ "spiderwoman.addEventListener('click', ev => run('spiderwoman'));"
 spiderwoman
 jsEval_ "spiderblur();"
+\end{code}
+
+== Plug and play ==
+
+To solve https://wiki.haskell.org/The_JavaScript_Problem[the JavaScript
+problem], I initially used the http://haste-lang.org/[Haste compiler]. The
+https://github.com/ghcjs/ghcjs[GHCJS] compiler seemed heavyweight and tough to
+install. It worked great. I could mostly pretend it was Haskell as usual.
+
+Sadly, Haste seems abandoned. The good news is that GHC is gaining JavaScript
+and WebAssembly backends. I would migrate, but my goals have shifted. Simple
+games ought to be simple to write. For toy programs, there should be no need
+for setting up complex development environments and lengthy compile times and
+lengthy boilerplate.
+
+When a game is sufficiently short and sweet, I use a version of
+link:../compiler/[my own Haskell compiler] because of some features:
+
+  * Zero-install. The webpage loads a wasm binary version of my compiler and
+  runs it on the code within.
+
+  * Helpers for global variables. Our `global` and `setGlobal` functions are
+  slightly less unprincipled than `unsafePerformIO` with `newIORef`. This suits
+  the event-driven nature of the DOM, as we can spread code among many
+  top-level functions rather than stuff everything into a single main function.
+
+  * Interactive REPL. Anyone can edit and run the code on the page (though of
+  course changes cannot be saved).
+
+  * Module fetching. Even halfway through a program we can fetch object files
+  elsewhere on my website and import their definitions. I no longer need to
+  start every program with a series of imports.
+
+  * In the same vein, my compiler uses my preferred language options so I no *
+  longer have to declare them at the start.
+
+Our code hits the ground running. For example, the following computes the 100th
+Fibonacci number. You can edit it and run it again: click the button or press
+Ctrl-Enter. Pressing Alt-Enter will run it and give you a new box to add more
+code, with access to all previous definitions.
+
+\begin{code}
+fibs=0:1:zipWith (+) fibs (tail fibs)
+fibs !! 100
 \end{code}

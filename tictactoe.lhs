@@ -123,8 +123,8 @@ one click away from the classic paper:
 https://www.cs.kent.ac.uk/people/staff/dat/miranda/whyfp90.pdf[John Hughes,
 _Why Functional Programming Matters_].
 
-He shows how easy it is to implmement minimax search in Haskell. The game tree
-one-liner above is also featured in the paper.
+Hughes shows how easy it is to implement minimax search in Haskell. The game
+tree one-liner above also appears in the paper.
 
 \begin{code}
 score (Game _ Won n) = n
