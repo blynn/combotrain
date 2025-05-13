@@ -11,52 +11,67 @@ some browser games in Haskell.
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=Sixtyfour&display=swap" rel="stylesheet">
 <style type="text/css">
-.term {
+#tty {
   font-family: 'Sixtyfour', monospace;
+  font-size: 100%;
+  color: #323232;
+  background: #aaaaaa;
+  overflow: hidden;
+}
+#tty:focus {
   color: #00ff00;
   background: #000000;
 }
-.term .termReverse {
-  background: #00ff00;
-  color: #000000;
-}
-table { margin: 0; }
 </style>
-<script src="/~blynn/termlib.js"></script>
-
 <button id="spiderwoman">REDO FROM START</button>
-<div id="spiderwomanDiv"></div>
+
+<div>
+<textarea rows="25" cols="40" id="tty" readonly></textarea>
+</div>
 <script>
 let run;
-let spiderterm;
-function spiderblur() {
-  spiderterm.cursorOff();
-  spiderterm.lock = true;
+let buf = "";
+
+function out(s) {
+  tty.value += s;
+  tty.scrollTop = tty.scrollHeight;
 }
+
+function inp(repl) {
+  buf = "";
+  tty.value += "? █";
+  reading = true;
+}
+
+tty.addEventListener("keydown", ev => {
+  ev.preventDefault();
+  if (!reading) return;
+  if (ev.keyCode >= 32 && ev.keyCode < 127) {
+    const c = String.fromCharCode(ev.keyCode);
+    buf += c;
+    tty.value = tty.value.slice(0, -1) + c + "█";
+  } else switch(ev.keyCode) {
+  case 8:
+    if (buf != "") {
+      buf = buf.slice(0, -1);
+      tty.value = tty.value.slice(0, -2) + "█";
+    }
+    break;
+  case 13:
+    tty.value = tty.value.slice(0, -1) + "\n";
+    tty.scrollTop = tty.scrollHeight;
+    reading = false;
+    run("inputCont [r|" + buf + "|]");
+    break;
+  }
+});
+
 function initSpiderwoman(repl) {
-  spiderterm = new Terminal({
-    handler: termHandler, greeting: '',
-    termDiv: 'spiderwomanDiv', ps: '?', cols: 40, rows: 25,
-    closeOnESC: false,
-    ctrlHandler: function() { if (this.inputChar == termKey.ESC) TermGlobals.keylock = true; }
-  });
   run = (s) => repl.run("chat", ["Main"], s);
-  function termHandler() {
-    this.newLine();
-    run("inputCont [r|" + this.lineBuffer + "|]");
-  }
-  spiderterm.open();
-  function spiderfocus(ev) {
-    TermGlobals.activeTerm = spiderterm;
-    spiderterm.lock = false;
-    spiderterm.cursorOn();
-    ev.stopPropagation();
-    let oneshot;
-    oneshot = document.body.addEventListener("click", (ev) => {
-      spiderblur(); document.body.removeEventListener("click", oneshot);
-    });
-  }
-  spiderwomanDiv.addEventListener("click", spiderfocus);
+  spiderwoman.addEventListener('click', ev => {
+    run('spiderwoman');
+    tty.focus();
+  });
 }
 </script>
 <br>
@@ -66,11 +81,10 @@ In my offline childhood, source code was hard to come by, so I was always
 elated if I saw https://usborne.com/us/books/computer-and-coding-books[computer
 programming books published by Usborne in the 1980s] at my local library.
 
-Let's attempt to remake these games. We use
-http://www.masswerk.at/termlib/[termlib] and a funny font to simulate an old
-computer. We define versions of common BASIC commands. Since `print` is a
-Haskell keyword, we use `output` instead of `PRINT`, and also define `outputs`,
-which prints a list of strings.
+Let's attempt to remake these games. We crudely simulate a crude terminal with
+CSS and JavaScript. We define versions of common BASIC commands. Since `print`
+is a Haskell keyword, we use `output` instead of `PRINT`, and also define
+`outputs`, which prints a list of strings.
 
 There is an awkward mismatch with the `INPUT` command due to the asynchronous
 nature of the DOM. We work around this by defining `input` to take a
@@ -81,12 +95,12 @@ there is a race condition, though it's difficult to trigger.
 \begin{code}
 rand n = fromInteger . readInteger <$> jsEval ("Math.floor(Math.random() * " ++ show n ++ ");")
 
-cls = jsEval_ "spiderterm.clear();"
-output s = jsEval_ $ "spiderterm.write(`" ++ s ++ "\n`);"
+cls = jsEval_ "tty.value = '';"
+output s = jsEval_ $ "out(`" ++ s ++ "\n`);"
 outputs = mapM_ output
 
 input cont = do
-  jsEval "spiderterm.prompt();"
+  jsEval "inp();"
   setGlobal cont
 
 inputCont s = global >>= ($ toUpper <$> s)
@@ -138,13 +152,13 @@ spiderwoman = do
   play 1 =<< (['A'..'Z']!!) <$> rand 26
 \end{code}
 
-Lastly, we write some glue code to connect HTML elements to our code:
+Lastly, we write some glue code to connect HTML elements to our code, and
+start the game:
 
 \begin{code}
 jsEval_ "initSpiderwoman(repl);"
-jsEval_ "spiderwoman.addEventListener('click', ev => run('spiderwoman'));"
 spiderwoman
-jsEval_ "spiderblur();"
+jsEval_ "tty.focus();"
 \end{code}
 
 == Plug and play ==
