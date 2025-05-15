@@ -14,8 +14,8 @@ some browser games in Haskell.
 #tty {
   font-family: 'Sixtyfour', monospace;
   font-size: 100%;
-  color: #323232;
-  background: #aaaaaa;
+  color: darkgrey;
+  background: lightgrey;
   overflow: hidden;
 }
 #tty:focus {
@@ -117,7 +117,7 @@ toUpper c
   where n = ord c
 \end{code}
 
-Now for the fun part: we convert the BASIC of yesteryear to Haskell.
+Now for the fun part: we convert ancient BASIC to Haskell.
 Let's take Spiderwoman from
 https://drive.google.com/file/d/0B2Z4GOoRXHWUVzBtTmxpV09NWFk/view?resourcekey=0-MTEoOx2EfESeq0ZBKvx25Q[Creepy
 Computer Games], where Spiderwoman is thinking of a letter that the player must

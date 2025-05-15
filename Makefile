@@ -5,7 +5,7 @@ SHELL=/bin/bash -o pipefail
 
 HSFILES=breakthrough chess redcode
 
-RUNMES=netwalk 15 peg index tictactoe basic
+RUNMES=netwalk 15 peg index tictactoe basic nim
 $(foreach x,$(RUNMES),$(x).html):%.html:%.run
 RUNFILES=$(addsuffix .lhs, $(RUNMES)) $(addsuffix .html, $(RUNMES))
 
@@ -14,7 +14,7 @@ SITEFILES=$(RUNFILES) $(addsuffix .html, $(HSFILES)) $(addsuffix .js, $(HSFILES)
 HS2JS=-mv Main.jsmod /tmp; hastec -Wall --opt-all
 
 menu.html: menu ; stitch menu $<
-%.html: %.run menu.html ; stitch book menu $<
+%.html: %.run menu.html ; stitch book menu $< && rm $<
 %.html: %.lhs menu.html ; stitch book menu $<
 %.run: %.lhs;(sed 's/\\begin{code}/[.runme]\n--------/;s/\\end{code}/--------/' $< ;\
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++';\

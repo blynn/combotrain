@@ -1,4 +1,5 @@
 index,Let's Play
+basic,BASIC Games
 peg,Peg Solitaire
 netwalk,Netwalk
 15,15-Puzzle
@@ -13,4 +14,6 @@ puzzlescript,PuzzleScript
 \- link:../haskell[Haskell Notes]
 \- link:../compiler[Compilers]
 \- link:../lambda[Lambda Calculus]
+\- link:../asm[Assembly]
+\- link:../pr[Probability]
 \- link:../[Ben Lynn]
