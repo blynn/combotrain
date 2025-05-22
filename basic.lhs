@@ -79,7 +79,7 @@ function initDemo(repl) {
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-I have many fond childhood memories of my first programming language: BASIC.
+I have fond childhood memories of my first programming language: BASIC.
 
 Many of them revolve around how hard it was to find source code to study,
 especially for a penniless kid. I was so desperate that I once memorized a
@@ -112,51 +112,6 @@ limit. No power is needed for the display, and it's easy on the eyes.
 
 Indulging in nostalgia, I ported some of the games from the above books to
 Haskell, using a `textarea` element with a scrollbar to approximate a teletype.
-
-== Extended Memory ==
-
-While I'm at it, I should mention
-https://vtda.org/books/Computing/Programming/BASIC/100%20Ready-To-Run%20Programs%20and%20Subroutines%20for%20the%20IBM%20PC.pdf[_100
-Ready-To-Run Programs and Subroutines for the IBM PC_], by Jeff Bretz and John
-Clark Craig. I possessed a translation of this book which I couldn't read, but
-I could type in the programs just fine, and it was nice to have code that
-targeted my machine for a change.
-
-I bought (or more accurately, got my parents to buy) a book by Steve Lucas,
-https://download.file-hunter.com/Books/EN/MSX%20Adventure%20Programming.pdf[_MSX
-Adventure Programming_]. I had no idea what MSX meant, but I could see that
-their dialect of BASIC was similar if not the same as GW-BASIC. I tried to type
-in some of the programs, but I lost patience.
-
-Mum would bring home old issues of
-https://en.wikipedia.org/wiki/APC_(magazine)[_Australian Personal Computer_]
-from work. In those days they had program listings, but the BASIC programs were
-rarely games. Some were programs that wrote bytes to a `.COM` file so they were
-really hex dumps. Nonetheless, ultimately I did learn a lot from this magazine.
-
-Towards the end of primary school, I acquired a few periodicals.
-link:../asm/boot.html[A _Computing Now!_ magazine] containing a tutorial on
-programming the boot sector, an issue of
-https://en.wikipedia.org/wiki/Dr.%5fDobb%27s%5fJournal[_Dr. Dobb's Journal_],
-and multiple(!) issues of a UK magazine which appears to be known as
-https://www.computinghistory.org.uk/det/24627/Personal-Computing-with-the-Amstrad-May-1990/[_Personal
-Computing with the Amstrad_], though by my time, there was no trace of this
-mythical Amstrad. All I saw was a large italicized "PC" emblazoned on the
-cover, with the reassuring "IBM and compatible PCs" in smaller print.
-
-The last of these were my favourite. They were the only ones which I recall
-physically buying myself, that is, picking up the magazine off the rack and
-handing coins to the proprietor. I learned assembly programming from them,
-which opened up new worlds. And each issue was bundled with a 5¼-inch floppy
-disk full of DOS programs.
-
-I recall `PIANOLA.COM`, which played up to 4-notes simultaneously through the
-PC speaker thanks to special tricks invovling the 8253 chip while animating
-something resembling a piano roll; I believe one sample tune was "I Do Like to
-Be Beside the Seaside". Another made a sound effect that was advertised to
-sound a bit like the TARDIS warping. Another had software that could be
-unlocked by typing the right key. I tried reverse engineering it with a
-disassembler, unsuccessfully.
 
 == Let it flow ==
 
@@ -601,8 +556,89 @@ that children as old as 11] struggle to write recursive programs even if they
 understand the idea; I speculate the myelination that occurs soon after
 this age unlocks the ability. BASIC was age-appropriate for me.
 
-Stepping away from the theory, BASIC is almost always experienced through an
-interpreter, rather than a compiler; an interactive Read-Eval-Print-Loop
-(REPL), yet one which it was still easy to write big blocks of code due to the
-line number convention. The instant feedback encouraged tinkering and
-experimentation, and accelerated learning.
+== Extended Memory ==
+
+This kids-these-days webpage seems like a good place to record the history of
+what Dijkstra would call my mental mutilation.
+
+I started with a John Sands Sega SC-3000, one of those 8-bit microcomputers
+that plugged into a TV. That meant a small low-resolution screen in front of a
+bulky cathode ray tube. I'd boot into BASIC and type in examples from the
+reference manual, marveling at the screen changing colours, or sounds being
+played.
+
+By second grade, there had been a mass extinction event. It felt as if the vast
+majority of microcomputer species vanished. My family moved on to one of the
+few surivivors, an "IBM PC compatible". It was a "Profound"-branded system
+built around an 8088. One day, Mum handed me a book that taught BASIC
+programming and my journey truly began. I remember the words "A BASIC Primer"
+on the cover, and flat wide white plastic ring binding; after a little digging,
+I think it was https://archive.org/details/basicprimerforib0000triv[_A BASIC
+Primer for the IBM Personal Computer_ by Donald B. Trivette].
+
+Then began a long drought that lasted until I got online, punctuated by a few
+purchases, and whatever I could scrounge up in libraries. I nagged my parents
+to buy me a cheap translation of
+https://vtda.org/books/Computing/Programming/BASIC/100%20Ready-To-Run%20Programs%20and%20Subroutines%20for%20the%20IBM%20PC.pdf[_100
+Ready-To-Run Programs and Subroutines for the IBM PC_], by Jeff Bretz and John
+Clark Craig. I couldn't read it, but I could type in the programs just fine,
+and it was nice to have code that targeted my machine for a change.
+
+On another occasion I bought a book by Steve Lucas,
+https://download.file-hunter.com/Books/EN/MSX%20Adventure%20Programming.pdf[_MSX
+Adventure Programming_]. I had no idea what MSX meant, but I could see that
+their dialect of BASIC was similar if not the same as GW-BASIC. I tried to type
+in some of the programs, but I lost patience.
+
+For several years, Mum would bring home old issues of
+https://en.wikipedia.org/wiki/APC_(magazine)[_Australian Personal Computer_]
+from work. In those days they had program listings, but the BASIC programs were
+rarely games. Some were programs that wrote bytes to a `.COM` file so they were
+really hex dumps. Nonetheless, ultimately I did learn a lot from this magazine.
+
+Towards the end of primary school, I acquired a few periodicals.
+link:../asm/boot.html[A _Computing Now!_ magazine] containing a tutorial on
+programming the boot sector, an issue of
+https://en.wikipedia.org/wiki/Dr.%5fDobb%27s%5fJournal[_Dr. Dobb's Journal_],
+and multiple(!) issues of a UK magazine which appears to be known as
+https://www.computinghistory.org.uk/det/24627/Personal-Computing-with-the-Amstrad-May-1990/[_Personal
+Computing with the Amstrad_], though by my time, there was no trace of this
+mythical Amstrad. All I saw was a large monochromatic sans-serif italicized
+"PC" emblazoned on the cover, with the reassuring "IBM and compatible PCs" in
+smaller print.
+
+The last of these were my favourite. They were the only ones which I recall
+physically buying myself, that is, picking up the magazine off the rack and
+handing coins to the proprietor. I first learned assembly from them, which
+opened up new worlds. And each issue was bundled with a 5¼-inch floppy disk
+full of DOS programs.
+
+I recall `PIANOLA.COM`, which played up to four notes simultaneously through
+the PC speaker thanks to special tricks invovling the 8253 chip while animating
+something resembling a piano roll; I believe one sample tune was "I Do Like to
+Be Beside the Seaside". Another made a sound effect that was advertised to
+sound a bit like the TARDIS warping. Another had software that could be
+unlocked by typing the right key. I tried reverse engineering it with a
+disassembler, unsuccessfully.
+
+Assembly language was not my only foray beyond BASIC. On a visit to our state
+library, I found a book on Apple LOGO, a language I had heard a lot about. I
+took copious notes despite having no access to an interpreter.
+
+In third or fourth grade, I picked up a little C from a bunch of text files, as
+adults told me this was a more serious language. I disliked it. There was a
+weird separate compile phase, and frequent complaints about trivial details
+like missing semicolons and missing variable declarations got in my way.
+
+During university, my attitudes towards C changed. Of course I should isten to
+the experts. Of course a real language ought to be compiled, and ought to fuss
+over punctuation and declarations. 
+
+Now, I seem to be reverting to my childhood (cue that
+beginner-intermediate-expert meme). My natural first instincts may have been
+correct. Out of the mouths of babes, perhaps. But also out of the mouths of the
+older and wiser: see https://jackrusher.com/strange-loop-2022/[Jack Rusher,
+_Stop Writing Dead Programs_], which mirrors my experience. I programmed in
+BASIC via an interactive Read-Eval-Print-Loop (REPL) where it was still easy to
+write big blocks of code due to the line number convention. The instant
+feedback encouraged tinkering and experimentation, and accelerated learning.
