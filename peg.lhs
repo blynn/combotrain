@@ -107,7 +107,7 @@ click x y = do
   refresh
 \end{code}
 
-Let's roll!
+Let's hop to it!
 
 \begin{code}
 newGame

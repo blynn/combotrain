@@ -38,10 +38,7 @@ function coin(x, y) {
   ctx.stroke(); ctx.fill();
 }
 
-let selection;
-
 function redraw() {
-  selection = undefined;
   ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(snap, 0, 0, canvas.width, canvas.height);
@@ -56,7 +53,6 @@ function highlight(x, y, n) {
     ctx.rect(90*x - 80, 310 - 30*k, 70, 20);
     ctx.stroke();
   }
-  selection = [x-1, y-1];
 }
 
 let run;
@@ -74,27 +70,17 @@ function fade(x, y, n) {
   requestAnimationFrame(go);
 }
 
-let busy = false;
 function setup(repl) {
   run = function(s) { repl.run("chat", ["Main"], s); };
 
   canvas.addEventListener("mousemove", ev => {
-    if (busy) return;
     const x = Math.floor((ev.offsetX + 80) / 90) - 1;
     const y = Math.floor((310 - ev.offsetY) / 30);
-    if (x >= 0 && y >= 0) run("mouseMove " + x + " " + y); else redraw();
+    run("mouseMove " + x + " " + y);
   });
-  canvas.addEventListener("mouseout", ev => { if (!busy) redraw(); });
-  canvas.addEventListener("click", ev => {
-    if (busy || !selection) return;
-    busy = true;
-    run("play " + selection[0] + " " + selection[1]);
-  });
-  function newGame() {
-    if (busy) return;
-    busy = true;
-    run("newGame");
-  }
+  canvas.addEventListener("mouseout", ev => run("mouseOut"));
+  canvas.addEventListener("click", ev => { run("play"); });
+  function newGame() { run("newGame"); }
   newButton.addEventListener("click", ev => newGame());
   document.body.addEventListener("keydown", ev => { if (ev.keyCode == 113) newGame(); });
 }
@@ -457,7 +443,11 @@ move takes a few more. But demonstrating them with a web widget takes an
 eye-watering mess:
 
 \begin{code}
-data Nim = Nim [Int]
+data Nim = Nim
+  { _nim :: [Int]
+  , _selection :: Maybe (Int, Int)
+  , _busy :: Bool
+  }
 
 draw ns = do
   jsEval_ "prep();"
@@ -471,38 +461,60 @@ draw ns = do
         [ "coin(", show x, ", ", show y, ");" ] | y <- [ 1..n]]
       go (succ x) nt
 
-mouseMove x y = do
-  Nim ns <- global
-  if x < length ns && y < ns!!x
-    then do
-      jsEval_ $ concat
-        [ "highlight(", show $ x+1, ", ", show $ y+1, ", ", show $ ns!!x, ");" ]
-    else jsEval_ "redraw();"
+mouseOut = do
+  g <- global
+  setGlobal g { _selection = Nothing }
+  unless (_busy g) $ jsEval_ "redraw();"
 
-play x y = do
-  Nim ns <- global
-  let (us, n:vs) = splitAt x ns
-  setGlobal $ Nim $ us ++ y:vs
-  jsEval_ "msg.innerText = `Computer's move`;"
-  jsEval_ $ concat
-    ["fade(", show (x+1), ", ", show (y+1), ", 0);"]
+mouseMove x y = do
+  g <- global
+  let ns = _nim g
+  if x >= 0 && y >= 0 && x < length ns && y < ns!!x
+    then do
+      setGlobal g { _selection = Just (x, y) }
+      unless (_busy g) $ jsEval_ $ concat
+        [ "highlight(", show $ x+1, ", ", show $ y+1, ", ", show $ ns!!x, ");" ]
+    else do
+      setGlobal g { _selection = Nothing }
+      unless (_busy g) $ jsEval_ "redraw();"
+
+play = do
+  g <- global
+  unless (_busy g) case _selection g of
+    Nothing -> pure ()
+    Just (x, y) -> do
+      let ns = _nim g
+      let (us, n:vs) = splitAt x ns
+      setGlobal g { _nim = us ++ y:vs, _busy = True }
+      jsEval_ "msg.innerText = `Computer's move`;"
+      jsEval_ $ concat
+        ["fade(", show (x+1), ", ", show (y+1), ", 0);"]
 
 rand n = fromInteger . readInteger <$> jsEval ("Math.floor(Math.random() * " ++ show n ++ ");")
 
+yourMove = do
+  jsEval_ "msg.innerText = `Your move`;"
+  _selection <$> global >>= \case
+    Nothing -> pure ()
+    Just (x, y) -> mouseMove x y
+
 postfade 0 = do
-  Nim ns <- global
+  g <- global
+  let ns = _nim g
   draw ns
   let
     move n n' = do
       draw ns
       let (us, _:vs) = break (n ==) ns
-      setGlobal $ Nim $ us ++ n':vs
+      setGlobal g { _nim = us ++ n':vs }
       jsEval_ $ concat
         ["fade(", show (length us + 1), ", ", show (n'+1), ", 1);"]
 
   case best ns of
     Nothing -> case filter (0 /=) ns of
-      [] -> jsEval_ "victory(); busy = false;"
+      [] -> do
+        setGlobal g { _busy = False }
+        jsEval_ "victory();"
       ms -> do
         m <- (ms!!) <$> rand (length ms)
         m' <- rand m
@@ -510,22 +522,21 @@ postfade 0 = do
     Just (n, n') -> move n n'
 
 postfade 1 = do
-  Nim ns <- global
+  g <- global
+  let ns = _nim g
   draw ns
-  if all (0 ==) ns then jsEval_ "defeat();"
-    else jsEval_ "msg.innerText = `Your move`;"
-  jsEval_ "busy = false;"
+  setGlobal g { _busy = False }
+  if all (0 ==) ns then jsEval_ "defeat();" else yourMove
 
 startGame ns = do
-  setGlobal $ Nim ns
+  setGlobal $ Nim ns Nothing False
   draw ns
-  jsEval_ "msg.innerText = `Your move`;"
+  yourMove
 
 newGame = do
   p <- succ <$> rand 7
   ns <- replicateM p $ succ <$> rand 10
   startGame ns
-  jsEval_ "busy = false;"
 
 jsEval_ "setup(repl);"
 startGame [3, 5, 7]
