@@ -1,13 +1,14 @@
 = Nim =
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<center>
-<div id="winlose">Wins: 0 Losses: 0</div>
-<canvas id="canvas" width="640" height="304"></canvas>
+<style>
+.center{display:block;margin:auto;text-align:center;}
+</style>
+<div id="winlose" style="text-align:right;">Wins: 0 Losses: 0</div>
+<canvas id="canvas" class="center" width="640" height="304"></canvas>
 <canvas style="display:none;" id="snap" width="640" height="304"></canvas>
-<div id="msg"></div>
-<button id="newButton">New Game</button>
-</center>
+<div id="msg" class="center"></div>
+<button id="newButton" class="center">New Game</button>
 <script>"use script";
 let ctx;
 let wins = 0, losses = 0;
@@ -103,13 +104,12 @@ nextNims = \case
   [] -> []
   n:ns -> ns : map (:ns) [1..n-1] ++ map (n:) (nextNims ns)
 
-nextNims [3,5,7]
+nextNims [3,5,5,7]
 \end{code}
 
 but the order of the piles is irrelevant, so we instead use a map where a key
-is a size of a pile, and its corresponding value is the number of piles with
-that size. When updating a map, if a value drops to zero then its entry is
-deleted.
+is a size of a pile, and its corresponding value is the count of piles with
+that size. When the count drops to zero we delete the entry.
 
 \begin{code}
 jsEval "curl_module('../compiler/Map.ob')"
@@ -118,12 +118,16 @@ jsEval "curl_module('../compiler/Map.ob')"
 \begin{code}
 import Map
 
-nextNims :: Map Int Int -> [Map Int Int]
-nextNims m = [(if k == 1 then id else insert n (k - 1)) .
+nextNims' :: Map Int Int -> [Map Int Int]
+nextNims' m = [(if k == 1 then id else insert n (k - 1)) .
     (if i == 0 then id else insertWith (+) i 1) $ m' |
     (n, k) <- assocs m, let m' = delete n m, i <- [0..n-1]]
 
-nextNims $ fromList $ map (,1) [1,2,3]
+nextNims = map toAscList . nextNims' . fromList
+
+toPiles = concatMap $ uncurry $ flip replicate
+
+map toPiles $ nextNims [(3,1), (5,2), (7,1)]
 \end{code}
 
 A standard minimax search finds the best move for any given position. However,
@@ -151,33 +155,29 @@ data Tree a = Node a [Tree a]
 unfoldTree f b = let (a, bs) = f b in Node a (unfoldForest f bs)
 unfoldForest f = map (unfoldTree f)
 
-minZ = foldr1 (\a b -> if a == 0 then 0 else b)
+minZ = foldr (\a b -> if a == 0 then 0 else b) 1
 
-minOnly (Node _ kids) = case kids of
-  [] -> 0
-  _  -> 1 - minZ (minOnly <$> kids)
+minOnly (Node _ kids) = 1 - minZ (minOnly <$> kids)
 
-toPiles = concatMap $ uncurry $ flip replicate
-
-bestBrute g = toPiles $ toAscList $ snd $ foldr1 go
+bestBrute g = toPiles $ snd $ foldr1 go
     $ zip (minOnly . gameTree <$> xs) xs
   where
   xs = nextNims g
   go a b = if fst a == 0 then a else b
-  gameTree = unfoldTree \g -> (g, nextNims g)
+  gameTree = unfoldTree \p -> (p, nextNims p)
 \end{code}
 
 For example, if there is one pile of 5 coins, the best move is to take them
 all:
 
 \begin{code}
-bestBrute $ fromList [(5, 1)]
+bestBrute [(5, 1)]
 \end{code}
 
 For three piles with 2, 3, and 4 coins, it's best to take 3 from the biggest pile:
 
 \begin{code}
-bestBrute $ fromList $ (,1) <$> [2, 3, 4]
+bestBrute $ (,1) <$> [2, 3, 4]
 \end{code}
 
 Adding a pile of \(n\) coins to a game only increases the number of possible
@@ -186,27 +186,21 @@ explore the entire game tree for typical games of Nim. We replace the tree data
 structure with a lookup table, improving the running time exponentially:
 
 \begin{code}
-nimMinM m
-  | size m == 0 = pure 0
-  | otherwise = maybe go pure . mlookup as =<< get
-  where
-  as = toAscList m
+nimMinM as = maybe go pure . mlookup as =<< get where
   go = do
-    n <- (1 -) . minZ <$> mapM nimMinM (nextNims m)
+    n <- (1 -) . minZ <$> mapM nimMinM (nextNims as)
     modify $ insert as n
     pure n
 
-nimScores = (`execState` mempty) . nimMinM . fromList
+nimScores = (`execState` mempty) . nimMinM
 \end{code}
 
 We print all zero-score positions of a `[3,5,7]` Nim game to produce a
 cheat sheet. A winning strategy is to always move to a position on this list.
 
 \begin{code}
-do
-  let
-    tab = toAscList $ nimScores [(3,1), (5,1), (7,1)]
-  print $ toPiles . fst <$> filter ((0 ==) . snd) tab
+print $ toPiles . fst <$> filter ((0 ==) . snd)
+    (toAscList $ nimScores [(3,1), (5,1), (7,1)])
 \end{code}
 
 == Nimbers ==
@@ -227,25 +221,32 @@ positive number called a _nimber_, or _Grundy value:_
 
   * All leaf positions have nimber 0. These are the positions where no moves are possible, so we win if we move to them.
 
-  * All other nimbers are computed recursively. A position has nimber \(n\) if the set of nimbers that arise from all possible moves contains each of \(\{0, 1, ..., n-1\}\) and does not contain \(n\).
+  * All other nimbers are computed recursively. The nimber of an internal node
+  is the smallest natural missing from the set of nimbers of the next positions.
+
+We restate this as follows. A position has nimber \(n\) if there exists a move
+to each of the nimbers \(0, 1, ..., n-1\), but no move leads to the nimber
+\(n\).
 
 For example:
 
   * A position has nimber 1 if all moves directly lead to nimber 0 positions.
 
-  * If \(n = 0\), the set is vacuously empty, so the condition simply becomes "does not contain zero", that is, if no moves go to a nimber 0 position, then the position has nimber 0.
+  * If \(n = 0\), the condition degenerates to "no move leads to nimber zero".
+  This include leaf nodes, but also nodes that, say, can only reach the
+  nimbers \(\{4, 6, 8, 9\}\).
 
-  * A position has nimber \(4\) if a player can move to positions with nimbers in the set \(\{0, 1, 2, 3\}\).
+  * A position has nimber \(4\) if a player can move to positions with nimbers
+  in the set \(\{0, 1, 2, 3\}\). Or \(\{0, 1, 2, 3, 42\}\).
+  Or \(\{0, 1, 2, 3, 5, 6, 7, 8\}\). Or any other set containing all naturals
+  less than 4, but not containing 4 itself.
 
-  * A position has nimber \(4\) if a player can move to positions with nimbers in the set \(\{0, 1, 2, 3, 42\}\). Or \(\{0, 1, 2, 3, 5, 6, 7, 8\}\). Or any other set containing all naturals less than 4, but not containing 4 itself.
-
-We find that like our first game tree, winning positions are associated with 0:
-we can force a win if our move goes to a nimber 0 position. But unlike our
-first game tree, the losing positions can have different positive numbers.
+Like our first game tree, winning positions are associated with 0: we can force
+a win if our move goes to a nimber 0 position. But unlike our first game tree,
+the losing positions can have different positive numbers.
 
 The smallest natural missing from a set of naturals is known as its _mex_
 ("minimum excluded value").
-
 
 By replacing `(1 -) . minZ` with `mex` in our memoized game tree searcher,
 we can find the nimber of every position:
@@ -253,17 +254,13 @@ we can find the nimber of every position:
 \begin{code}
 mex xs = head $ [0..] \\ xs
 
-nimberNimM m
-  | size m == 0 = pure 0
-  | otherwise = maybe go pure . mlookup as =<< get
-  where
-  as = toAscList m
+nimberNimM as = maybe go pure . mlookup as =<< get where
   go = do
-    n <- mex <$> mapM nimberNimM (nextNims m)
+    n <- mex <$> mapM nimberNimM (nextNims as)
     modify $ insert as n
     pure n
 
-nimberMap = (`execState` mempty) . nimberNimM . fromList
+nimberMap = (`execState` mempty) . nimberNimM
 \end{code}
 
 Here's every nimber of every position of `[1,2,3]` Nim:
@@ -283,17 +280,16 @@ Consider one-pile Nim. The winning strategy is obvious: take all the coins,
 leaving nothing for the opponent, so they immediately lose. Almost by
 definition, the nimber of one pile of \(n\) coins is \(n\).
 
-Does one-pile Nim teach us anything about two-pile Nim? Let's study the nimbers
-of two piles of various sizes:
+Does one-pile Nim teach us anything about two-pile Nim?
 
 \begin{code}
 twoTab n = unlines
     [ unwords [sh $ twoNimber r c | c <- [0..n]] | r <- [0..n]]
   where
-  -- twoPiles r c = toAscList $ fromListWith (+) $ filter ((/= 0) . fst) [(r,1), (c,1)])
   sh n
     | n < 10 = ' ':show n
     | otherwise = show n
+  -- twoPiles r c = toAscList $ fromListWith (+) $ filter ((/= 0) . fst) [(r,1), (c,1)])
   twoPiles r c
     | r > c = twoPiles c r
     | c == 0 = []
@@ -390,9 +386,9 @@ the same nimber results in a winning position.
 == From minimax to minimum to mex to XOR ==
 
 We've seen how a game of two-pile Nim can be composed from two games of
-one-pile Nim. We generalize what we did to any two impartial games \(G\) and
-\(H\).
+one-pile Nim.
 
+We generalize to any two impartial games \(G\) and \(H\).
 Define \(G + H\) to be the game where each turn consists of either making a
 move in the position \(G\) to get \(G'\), or making a move in the position
 \(H\) to get \(H'\). A player must make a legal move in exactly one of the
@@ -404,29 +400,29 @@ For example, if \(G\) and \(H\) are one-pile Nim games, then \(G + H\) is a
 two-pile Nim game.
 
 All our reasoning applies to any impartial games \(G\) and \(H\). That is, let
-\(g, h\) be the nimbers of \(G, H\). Then the nimber of \(G + H\) is \(g \oplus
-h\).
+\(g, h\) be the nimbers of \(G, H\). Then the nimber of \(G + H\) is
+\(g \oplus h\). For example, if we take \(G\) to be a two-pile Nim position,
+and \(H\) to be a one-pile Nim position, then their sum is a three-pile Nim
+position, and we can compute its nimber with XOR.
 
 If \(g \oplus h \ne 0\), then they are unequal and we should make a move that
 reduces the larger nimber to match the smaller. Our opponent is then forced to
 make a move resulting in unequal nimbers. Iterating this process leads to a
 win, if the game is guaranteed to terminate.
 
-For example, in any game of Nim, by induction, the nimber of a position is the
+In any game of Nim, by induction, the nimber of a position is the
 XOR of all pile sizes.
 
 \begin{code}
 nimber = foldr xor (0 :: Int)
 
-best (n:ns) 
-  | n == h = Nothing
-  | otherwise = go n ns h
-  where
+best ns = go ns where
+  go = \case
+    [] -> Nothing
+    n:nt
+      | g <- xor n h, n > g -> Just (n, g)
+      | otherwise -> go nt
   h = nimber ns
-  go g xs h
-    | g > h = Just (g, h)
-    | otherwise = case xs of
-      x:xt -> go x xt $ g `xor` h `xor` x
 \end{code}
 
 No trees. No memoization. A handful of XORs is all we need to play Nim
@@ -549,10 +545,10 @@ https://en.wikipedia.org/wiki/Sprague%E2%80%93Grundy_theorem[the
 Sprague-Grundy theorem].
 
 I presented the ideas in a strange order because I wanted to relate them to my
-other notes on game trees, and also to tell an optimization story. We started
-with standard minimax, but by changing the scoring function and reasoning a
-little, we ended with an algorithm whose running time is within a small
-constant factor of the time it takes to read the input.
+other notes on game trees while telling an optimization story. We started with
+standard minimax, but by changing the scoring function and reasoning a little,
+we ended with an algorithm whose running time is within a small constant factor
+of the time it takes to read the input.
 
 A more natural path would be to first consider one-pile Nim, which is trivial,
 and then consider two-pile Nim. Most people would likely stumble upon the
@@ -592,9 +588,10 @@ Look familiar? These conditions define nimbers, and they imply a game only
 finishes when \(g = h = 0\).
 
 Notice throughout the above, we have no objection to a move that increases the
-natural associated with a position. The proof for the winning strategy works
-either way. We only care that no move preserves the nimber, and that there
-exists a move to reach any desired smaller nimber.
+natural associated with a position. Nor do we require that \(G\) and \(H\) be
+positions from the same game. Both games just need to be impartial.
+The proof for the winning strategy works so long as no move preserves the
+nimber, and that there exists a move to reach any desired smaller nimber.
 
 We could have tried removing more properties. For example:
 
@@ -610,7 +607,7 @@ winning and losing positions where both are nonzero.
 
 Sprague and Grundy found the sweet spot. If we remove too few properties, then
 there are too many restrictions for our ideas to apply more generally. If we
-remove too many, our ideas may apply more generally, but we lack enough data to
-solve big problems via composition.
+remove too many, our ideas may apply more generally, but we lack enough
+substance to solve big problems via composition.
 
 See https://en.wikipedia.org/wiki/Winning_Ways_for_Your_Mathematical_Plays[Berlekamp, Conway, and Guy, _Winning Ways for Your Mathematical Plays_].

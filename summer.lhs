@@ -1,17 +1,59 @@
 = Summer Games =
 
+*Treblecross*: Tic-tac-toe. One long row. Both play X. There is no O.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<style>
+.center{display:block;margin:auto;text-align:center;}
+</style>
+<canvas id="canvas" class="center" width="640" height="30"></canvas>
+<canvas style="display:none;" id="snap" width="640" height="304"></canvas>
+<div id="msg" class="center"></div>
+<button id="newButton" class="center">New Game</button>
+<br>
+<script>"use script";
+let ctx;
+ctx = canvas.getContext("2d");
+
+const x0 = 5, y0 = 5, dx = 20, dy = 20;
+
+function drawTreble(n) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < n; i++) {
+    ctx.beginPath();
+    ctx.rect(x0 + i*dx, y0, dx, dy);
+    ctx.stroke();
+  }
+}
+
+function ecks(n) {
+  ctx.beginPath();
+  ctx.moveTo(x0 + n*dx, y0);
+  ctx.lineTo(x0 + n*dx + dx, y0 + dy);
+  ctx.moveTo(x0 + n*dx + dx, y0);
+  ctx.lineTo(x0 + n*dx, y0 + dy);
+  ctx.stroke();
+}
+
+let run;
+function setup(repl) {
+  run = s => repl.run("chat", ["Main"], s);
+  canvas.addEventListener("click", ev => run("click " + ev.offsetX + " " + ev.offsetY));
+  newButton.addEventListener("click", ev => run("newGame"));
+  document.body.addEventListener("keydown", ev => { if (ev.keyCode == 113) newGame(); });
+}
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 Let's recap link:nim.html[our notes on the game of Nim].
 
 Every position \(X\) of any impartial game can be mapped to a natural number
 \(\newcommand{\nimber}[1]{\mathcal{G}(#1)}\nimber{X}\) known as its nimber, or
 Grundy value. Nimbers can be defined recursively on the game tree:
+the nimber of a node is the mex of the nimbers of its children.
 
-  * The nimber of each leaf is zero.
-
-  * The nimber of an internal node is the mex of the nimbers of its children.
-
-The following `mexM` function computes nimbers according to the above, using
-memoization to avoid duplicating work:
+The following `mexM` function computes nimbers with memoization to avoid
+duplicating work:
 
 \begin{code}
 jsEval "curl_module('../compiler/Map.ob')"
@@ -23,33 +65,30 @@ mex xs = head $ [0..] \\ xs
 
 import Map
 
-mexM f n = do
-  mlookup n <$> get >>= \case
-    Just m -> pure m
-    Nothing -> do
-      m <- case f n of
-        [] -> pure 0
-        ks -> mex <$> mapM (mexM f) ks
-      modify $ insert n m
-      pure m
+mexM f n = maybe go pure . mlookup n =<< get where
+  go = do
+    m <- mex <$> mapM (mexM f) (f n)
+    modify $ insert n m
+    pure m
 \end{code}
 
-In general, this is little better than minimax search, which also discovers all
-winning positions. However, nimbers allow shortcuts if we can decompose a game
-into a sum of two games \(G + H\), for the nimber of the sum of positions is
-the XOR of the nimbers of each summand. In particular, the nimber of any Nim
-position just the XOR of the sizes of each pile.
+In general, this is little better than minimax search, which also explores a
+tree to discover all winning positions. However, nimbers allow shortcuts if we
+can decompose a game into a sum of games, for the nimber of the sum of
+positions is the XOR of the nimbers of each summand. For example, a Nim
+position is especially simple: its nimber is the XOR of the sizes of each pile.
 
-We can go the other way and use nimbers and XOR to play optimally in a
-Frankenstein game of, say, Nim plus Kayles plus Treblecross, that is, we start
-the three games simultaneously and a turn consists of making a move in one of
-the three positions; a player loses if unable to move in any of the three.
+Another application of nimbers is to play optimally in a Frankenstein game of,
+say, Nim plus Kayles plus Treblecross, that is, we start the three impartial
+games simultaneously and a turn consists of making a move in one of the three
+positions; a player loses if unable to move in any of the three.
 
+We follow
 https://en.wikipedia.org/wiki/Winning_Ways_for_Your_Mathematical_Plays[Berlekamp,
-Conway, and Guy, _Winning Ways for Your Mathematical Plays_], goes beyond Nim
-and analyzes games with shortcuts based on game sums. While we cannot compute
-their nimbers as efficiently as we can for Nim, we can compute enough to
-trounce an uninitiated player for realistic game sizes.
+Conway, and Guy, _Winning Ways for Your Mathematical Plays_], and analyze
+Nim-like games that naturally decompose into sums of games. While we cannot
+compute their nimbers as efficiently as we can for Nim, we can compute enough
+to trounce an uninitiated player for realistic game sizes.
 
 == Subtraction Games ==
 
@@ -147,17 +186,17 @@ Such examples seem rare.
 
 where \(s_1\) is the smallest member of the subtraction set.
 
-We prove this by induction.
-Suppose \(\nimber{n} = 1\). If \(\nimber{n - s_1} \ne 0\), then \(n - s_1\) is
-a losing position. Thus \(\nimber{n - s_1 - s} = 0\) for some \(s\) in the
-substraction set, so by inductive hypothesis \(\nimber{n - s} = 1\), implying
-we can move from a nimber 1 position to a nimber 1 position, a contradiction.
+We prove this by induction. The base cases are trivial.
+Suppose \(\nimber{n} = 1\). If \(\nimber{n - s_1} \ne 0\), then \(\nimber{n -
+s_1 - s} = 0\) for some \(s\) in the substraction set, so by inductive
+hypothesis \(\nimber{n - s} = 1\), implying we can move from a nimber 1
+position \(n\) to a nimber 1 position \(n - s\), a contradiction.
 
 Conversely, suppose \(\nimber{n - s_1} = 0\), which immediately implies
 \(\nimber{n} \gt 0\). If \(\nimber{n} \ne 1\) then \(\nimber{n - s} = 1\) for
 some \(s\) in the subtraction set, so by inductive hypothesis
-\(\nimber{n - s - s_1} = 0\), implying
-we can move from a nimber 0 position to a nimber 0 position, a contradiction.
+\(\nimber{n - s - s_1} = 0\), implying we can move from a nimber 0
+position \(n - s_1\) to a nimber 0 position \(n - s_1 - s\), a contradiction.
 
 This curious proof relies on the inductive hypothesis for the \((<=)\)
 direction when proving \((=>)\) direction, and vice versa. It makes me
@@ -200,7 +239,7 @@ do
 But just as with Nim, a two-pile Kayles position is the sum of two one-pile
 games, thus we can compute the nimber of a one-pile Kayles position more
 efficiently with XOR. As before, our `go` helper adds the next nimber to the
-front of the list, so they appear in reverse order.
+front of the list, so we reverse the list before showing it.
 
 \begin{code}
 kayles = iterate go [0] where
@@ -239,11 +278,10 @@ If we write a bitstring as a number, then [0,1,2,3] represents the game where a
 player can choose one of the above three options on their move.
 
 We require bits 0 and 1 of \(d_0\) to be unset. Setting bit 0 is pointless, as
-this would mean taking nothing from a pile of coins and leaving nothing behind,
-which is impossible (unless we allow piles of size zero, but even then the
-analysis is trivial). Setting bit 1 leads to a boring game, as it means we can
-take nothing from a pile and leave a partition of size one, which is equivalent
-to passing provided at least one pile exists.
+this would mean taking nothing from a pile of coins and leaving nothing behind.
+Setting bit 1 leads to a boring game, as it means we can take nothing from a
+pile and leave a partition of size one, which is equivalent to passing provided
+at least one pile exists.
 
 Writing code to compute nimbers for these games is far easier than describing
 them. We start with link:../haskell/count.html[a function that finds all
@@ -289,13 +327,14 @@ For example, the nimbers of the [0,1,2,3] game are:
 reverse . fst . (!!32) $ takeBreak [0, 1, 2, 3]
 \end{code}
 
-Berlekamp, Conway, and Guy write the code of a take-and-break game as a string.
-They assume each number can be represented with a single character such as a
-hexadecimal digit, which is reasonable for practical games. Then they
-concatenate the digits, with a centered dot separating \(d_0\) from the others.
-If \(d_0 = 0\), then it is omitted. For example, the string *·123* means
-`[0,1,2,3]`, and *4·333...* means `[4,3,3,3,...]`. At time, they use dots
-above digits to indicate repetition.
+Berlekamp, Conway, and Guy write lists as a string. They assume each \(d_k\)
+can be represented with a single character such as a hexadecimal digit, which
+is reasonable for practical games. Then they concatenate the digits, with a
+centered dot separating \(d_0\) from the others. If \(d_0 = 0\), then it is
+omitted.
+
+For example, the string *·123* means `[0,1,2,3]`, and *4·333...* means
+`[4,3,3,3,...]`. At times, they use dots above digits to indicate repetition.
 
 We change the format so it is easy to type. We replace the centered dot with
 a standard period `(.)`, and a single `(#)` indicates the following digits are
@@ -340,7 +379,7 @@ impartial take-and-break game. What is its code?
 This may help: Dawson's Kayles is a variant of Kayles where the only legal
 move is to remove two pins that were initially adjacent.
 
-7. Treblecross is like link:tictactoe.html[Tic-Tac-Toe] except the board measures 1 by \(n\) and both players use the same symbol X. A player wins if they draw a third X in a row, or if the other player has no moves (which can only happen for \(n < 3\)).
+7. Treblecross is like link:tictactoe.html[Tic-Tac-Toe] except both players use the same symbol X, and they play on one row which is at least 3 squares long. A player wins if they draw a third X in a row.
 +
 This game turns out to be equivalent to a take-and-break game. What is its code?
 
@@ -378,20 +417,22 @@ do
   go "Officers" ".6"
 \end{code}
 
-== Grundy's Game ==
+== Breaking the code ==
 
-Grundy's Game is another game played with piles of coins. On their turn,
-a player splits a pile into two unequal non-empty piles. Hence the game ends
-when all piles have size one or two.
+We mention a few Nim-like games beyond the reach of our take-and-break coding
+scheme.
 
-The inequality check is beyond the scope of our take-and-break coding scheme,
-but we can still compute Grundy values of Grundy's Game easily enough via
-game sums.
+*Grundy's Game*: On their turn, a player splits a pile into two unequal
+non-empty piles. Hence:
 
 \[
 \newcommand{\mex}{\mathop{\rm mex}\nolimits}
+\begin{gathered}
+\nimber{0} = \nimber{1} = \nimber{2} = 0
+\\
 \nimber{n + 1} = \mex \{\nimber{n} \oplus \nimber{n-k} |
   k \in [1..\lfloor n / 2 \rfloor ] \}
+\end{gathered}
 \]
 
 \begin{code}
@@ -402,11 +443,9 @@ grundyGrundy = iterate go [0,0,0] where
 reverse $ grundyGrundy !! 25
 \end{code}
 
-== Prim ==
-
-In this game, a player can remove \(m\) from a pile of \(n\) coins exactly
-when \(m\) and \(n\) are coprime. There are two variants, depending on whether
-we allow a pile size to go from 1 to 0.
+*Prim*: A player can remove \(m\) from a pile of \(n\) coins exactly when \(m\)
+and \(n\) are coprime. There are two variants, depending on whether we allow a
+pile size to go from 1 to 0.
 
 The nimbers of piles of size 0 and 1 are immediate. Otherwise one can show
 that if going from 1 to 0 is forbidden, the nimber of a pile of size \(n\) is
@@ -433,11 +472,9 @@ primber False <$> [0..24]
 primber True <$> [0..24]
 \end{code}
 
-== Dim ==
-
-In this game, a player can remove \(d\) from a pile of \(n\) coins exactly
-when \(d\) divides \(n\). There are two variants, depending on whether
-we allow \(d = n\).
+*Dim*: A player can remove \(d\) from a pile of \(n\) coins exactly
+when \(d\) divides \(n\). There are two variants, depending on whether we allow
+\(d = n\).
 
 One can show that the nimber of a pile of \(n\) coins is \(k\) where \(2^k\) is
 the largest power of two dividing \(n\), provided taking all \(n\) coins is
@@ -457,4 +494,106 @@ dimber flag n
 
 dimber False <$> [0..24]
 dimber True <$> [0..24]
+\end{code}
+
+== Treblecross Demo ==
+
+The code below exploits the connection between Treblecross and the
+take-and-break game *·007*:
+
+\begin{code}
+nimbers007 = cheatSheet 50 ".007"
+
+heaps ns sz = go 1 0 ns where
+  go sides start = \case
+    [] -> [(start, (sz - start, sides + 1))]
+    n:nt -> (start, (n - start, sides)) : go 0 (n + 1) nt
+
+calcNimbers ns sz = go <$> heaps ns sz where
+  go p@(_, (len, sides)) = (nimbers007 !! (len + 2*(sides - 1)), p)
+
+best ns sz
+  | fst m == h0 = Nothing
+  | otherwise = go m mt h0
+  where
+  ms@(m:mt) = calcNimbers ns sz
+  h0 = foldr xor 0 $ fst <$> mt
+  go (g, p) xs h
+    | g > h = Just $ findCut h p
+    | otherwise = case xs of
+      x:xt -> go x xt $ g `xor` h `xor` fst x
+
+findCut tgt (start, (n, sides)) = case sides of
+  0 -> go 2 2
+  1 | start == 0 -> go 0 2
+    | otherwise  -> go 2 0
+  2 -> go 0 0
+  where
+  go r s = [start + a | a <- [r..n-1-s],
+      tgt == xor (nimbers007!!(a-r)) (nimbers007!!(n-a-1-s))]
+\end{code}
+
+We turn it into a web game:
+
+\begin{code}
+data Treblecross = Treblecross
+  { _board :: [Int]
+  , _over :: Bool
+  }
+
+ins n = \case
+  [] -> [n]
+  xs@(x:xt)
+    | x < n -> x : ins n xt
+    | otherwise -> n : xs
+
+rowSize = 30
+
+newGame = do
+  setGlobal $ Treblecross [] False
+  jsEval_ $ "drawTreble(" ++ show rowSize ++ ");"
+  jsEval_ $ "msg.innerHTML = '<br>';"
+
+treble ns start = all (`elem` ns) [start..start+2]
+
+computerWin k = do
+  ns <- _board <$> global
+  setGlobal $ Treblecross (ins k ns) True
+  jsEval_ $ "ecks(" ++ show k ++ ");"
+  jsEval_ "msg.innerText = `Computer wins`;"
+
+rand n = fromInteger . readInteger <$> jsEval ("Math.floor(Math.random() * " ++ show n ++ ");")
+
+click :: Int -> Int -> IO ()
+click x y = do
+  g <- global
+  unless (_over g) $ do
+    let n = div (x - 5) 20
+    when (y >= 5 && y <= 25 && n >= 0 && n < rowSize) $ do
+      ns <- _board <$> global
+      unless (elem n ns) do
+        ns <- pure $ ins n ns
+        jsEval_ $ "ecks(" ++ show n ++ ");"
+        \cases
+          | any (treble ns) [n-2..n] -> do
+            setGlobal $ Treblecross ns True
+            jsEval_ $ "msg.innerText = `You win!`"
+          | (n - 1) `elem` ns -> \cases
+            | n >= 2 -> computerWin $ n - 2
+            | otherwise -> computerWin $ n + 1
+          | (n + 1) `elem` ns -> \cases
+            | n >= 1 -> computerWin $ n - 1
+            | otherwise -> computerWin $ n + 2
+          | (n + 2) `elem` ns -> computerWin $ n + 1
+          | (n - 2) `elem` ns -> computerWin $ n - 1
+          | otherwise -> do
+            let
+              whatever = [0..rowSize - 1] \\ ns
+              ks = maybe whatever id $ best ns rowSize
+            k <- (ks!!) <$> rand (length ks)
+            setGlobal $ Treblecross (ins k ns) False
+            jsEval_ $ "ecks(" ++ show k ++ ");"
+
+jsEval_ "setup(repl);"
+newGame
 \end{code}
