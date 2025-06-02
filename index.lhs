@@ -166,7 +166,7 @@ jsEval_ "tty.focus();"
 To solve https://wiki.haskell.org/The_JavaScript_Problem[the JavaScript
 problem], I initially used the http://haste-lang.org/[Haste compiler]. The
 https://github.com/ghcjs/ghcjs[GHCJS] compiler seemed heavyweight and tough to
-install. It worked great. I could mostly pretend it was Haskell as usual.
+install. Haste worked great, and I could mostly pretend it was Haskell as usual.
 
 Sadly, Haste seems abandoned. The good news is that GHC is gaining JavaScript
 and WebAssembly backends. I would migrate, but my goals have shifted. Simple

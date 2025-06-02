@@ -1,24 +1,31 @@
 = Summer Games =
 
++++<div style="display:none;" id="howtoXXX">+++
 *Treblecross*: Tic-tac-toe. One long row. Both play X. There is no O.
++++</div>+++
+
++++<div style="display:none;" id="howtoChess">+++
+*Dawson's Chess*: Captures are mandatory. A player loses if unable to move.
++++</div>+++
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<div id="howto"></div>
+<br>
 <style>
 .center{display:block;margin:auto;text-align:center;}
 </style>
-<canvas id="canvas" class="center" width="640" height="30"></canvas>
-<canvas style="display:none;" id="snap" width="640" height="304"></canvas>
+<canvas style="display:none;" id="xxxCanvas" class="center" width="640" height="30"></canvas>
+<canvas id="chessCanvas" class="center" style="display:none;border:1px solid black;" width="640" height="120"></canvas>
+<br>
 <div id="msg" class="center"></div>
-<button id="newButton" class="center">New Game</button>
+<div class="center">New game: <button id="xxxButton">XXX</button> <button id="chessButton">&#x2659;&#x265f;</button></div>
 <br>
 <script>"use script";
-let ctx;
-ctx = canvas.getContext("2d");
-
 const x0 = 5, y0 = 5, dx = 20, dy = 20;
 
 function drawTreble(n) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const ctx = xxxCanvas.getContext("2d");
+  ctx.clearRect(0, 0, xxxCanvas.width, xxxCanvas.height);
   for (let i = 0; i < n; i++) {
     ctx.beginPath();
     ctx.rect(x0 + i*dx, y0, dx, dy);
@@ -27,6 +34,7 @@ function drawTreble(n) {
 }
 
 function ecks(n) {
+  const ctx = xxxCanvas.getContext("2d");
   ctx.beginPath();
   ctx.moveTo(x0 + n*dx, y0);
   ctx.lineTo(x0 + n*dx + dx, y0 + dy);
@@ -36,12 +44,57 @@ function ecks(n) {
 }
 
 let run;
-function setup(repl) {
+function initXXX(repl) {
   run = s => repl.run("chat", ["Main"], s);
-  canvas.addEventListener("click", ev => run("click " + ev.offsetX + " " + ev.offsetY));
-  newButton.addEventListener("click", ev => run("newGame"));
-  document.body.addEventListener("keydown", ev => { if (ev.keyCode == 113) newGame(); });
+  xxxCanvas.addEventListener("click", ev => run("click " + ev.offsetX + " " + ev.offsetY));
+  xxxButton.addEventListener("click", ev => run("newXXX"));
 }
+
+const cc = chessCanvas.getContext("2d");
+function checker(c, x, y, w, h) {
+  cc.fillStyle = c == 0 ? 'rgb(255,255,255)' : 'rgb(191,191,191)';
+  cc.beginPath();
+  cc.rect(x,y,w,h);
+  cc.fill();
+}
+function pawn(c, x, y) {
+  cc.font = "40px sans-serif";
+  cc.fillStyle = 'rgb(0,0,0)';
+  cc.fillText(c, x, y);
+}
+const fromCanvas = document.createElement('canvas');
+const toCanvas = document.createElement('canvas');
+function initChess(sz, d) {
+  {
+    fromCanvas.width = sz;
+    fromCanvas.height = sz;
+    const c = fromCanvas.getContext('2d');
+    c.fillStyle = 'rgb(127,15,15)';
+    c.beginPath();
+    c.rect(0, 0, d, sz);
+    c.rect(0, 0, sz, d);
+    c.rect(sz - d, 0, d, sz);
+    c.rect(0, sz - d, sz, d);
+    c.fill();
+  }
+  {
+    toCanvas.width = sz;
+    toCanvas.height = sz;
+    const c = toCanvas.getContext('2d');
+    c.fillStyle = 'rgba(0,191,0,0.3)';
+    c.beginPath();
+    c.rect(0, 0, sz, sz);
+    c.fill();
+  }
+  chessCanvas.addEventListener("click", ev => run("chessClick " + ev.offsetX + " " + ev.offsetY));
+
+  chessButton.addEventListener("click", ev => run("newChess"));
+}
+const snapChessCanvas = document.createElement('canvas');
+snapChessCanvas.width = chessCanvas.width;
+snapChessCanvas.height = chessCanvas.height;
+function snapChess() { snapChessCanvas.getContext("2d").drawImage(chessCanvas, 0, 0); }
+function unsnapChess() { chessCanvas.getContext("2d").drawImage(snapChessCanvas, 0, 0); }
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -189,14 +242,14 @@ where \(s_1\) is the smallest member of the subtraction set.
 We prove this by induction. The base cases are trivial.
 Suppose \(\nimber{n} = 1\). If \(\nimber{n - s_1} \ne 0\), then \(\nimber{n -
 s_1 - s} = 0\) for some \(s\) in the substraction set, so by inductive
-hypothesis \(\nimber{n - s} = 1\), implying we can move from a nimber 1
-position \(n\) to a nimber 1 position \(n - s\), a contradiction.
+hypothesis \(\nimber{n - s} = 1\), implying we can move from the nimber-1
+position \(n\) to the nimber-1 position \(n - s\), a contradiction.
 
 Conversely, suppose \(\nimber{n - s_1} = 0\), which immediately implies
 \(\nimber{n} \gt 0\). If \(\nimber{n} \ne 1\) then \(\nimber{n - s} = 1\) for
 some \(s\) in the subtraction set, so by inductive hypothesis
-\(\nimber{n - s - s_1} = 0\), implying we can move from a nimber 0
-position \(n - s_1\) to a nimber 0 position \(n - s_1 - s\), a contradiction.
+\(\nimber{n - s - s_1} = 0\), implying we can move from the nimber-0
+position \(n - s_1\) to the nimber-0 position \(n - s_1 - s\), a contradiction.
 
 This curious proof relies on the inductive hypothesis for the \((<=)\)
 direction when proving \((=>)\) direction, and vice versa. It makes me
@@ -496,32 +549,28 @@ dimber False <$> [0..24]
 dimber True <$> [0..24]
 \end{code}
 
-== Treblecross Demo ==
+== Demos ==
 
-The code below exploits the connection between Treblecross and the
-take-and-break game *·007*:
+The code below reveals the connection between Treblecross and the
+take-and-break game *·007*. We represent a position with a list of integers
+indicating the location of the Xs, along with the total number of cells. We
+assume no two Xs are adjacent, or have only one blank cell between them, where
+it is obvious how to win.
 
 \begin{code}
 nimbers007 = cheatSheet 50 ".007"
 
-heaps ns sz = go 1 0 ns where
+wins ms = [(g, p) | (n, p) <- ms, let g = xor n h, n > g]
+  where h = foldr xor 0 $ fst <$> ms
+
+convertTreblecross ns sz = go 1 0 ns where
   go sides start = \case
     [] -> [(start, (sz - start, sides + 1))]
     n:nt -> (start, (n - start, sides)) : go 0 (n + 1) nt
 
-calcNimbers ns sz = go <$> heaps ns sz where
+winsTreblecross ns sz = uncurry findCut =<< wins ms where
+  ms = go <$> convertTreblecross ns sz
   go p@(_, (len, sides)) = (nimbers007 !! (len + 2*(sides - 1)), p)
-
-best ns sz
-  | fst m == h0 = Nothing
-  | otherwise = go m mt h0
-  where
-  ms@(m:mt) = calcNimbers ns sz
-  h0 = foldr xor 0 $ fst <$> mt
-  go (g, p) xs h
-    | g > h = Just $ findCut h p
-    | otherwise = case xs of
-      x:xt -> go x xt $ g `xor` h `xor` fst x
 
 findCut tgt (start, (n, sides)) = case sides of
   0 -> go 2 2
@@ -531,15 +580,58 @@ findCut tgt (start, (n, sides)) = case sides of
   where
   go r s = [start + a | a <- [r..n-1-s],
       tgt == xor (nimbers007!!(a-r)) (nimbers007!!(n-a-1-s))]
+
+winsTreblecross [7, 10] 16
 \end{code}
 
-We turn it into a web game:
+We do the same for Dawson's Chess, where we assume all obligatory pawn
+captures have already been played. We use a one-off encoding scheme to
+represent a file of the board:
+
+----------------------------------------------------------------
+. B B . . . B B
+. W . B . W . B
+. . W W W W . .
+0 l 2 3 4 5 6 7
+----------------------------------------------------------------
+
+The `winsChess` function lists Black's winning moves, represented by the
+index of the file where a pawn should be pushed.
+
+\begin{code}
+nimbers137 = cheatSheet 50 ".137"
+
+findChess h (start, n)
+  | n == 1 = [start]
+  | n == 2 = [start, start + 1]
+  | otherwise = ends ++ mids
+  where
+  ends = if nimbers137!!(n - 2) == h then [start, start + n - 1] else []
+  mids = [start + i | i <- [1..n-2], (nimbers137!!(i-1)) `xor` (nimbers137!!(n-2-i)) == h]
+
+convertChess = go id where
+  go acc xs = case dropWhile ((2 /=) . snd) xs of
+    [] -> acc []
+    rest -> let
+      (us, vs) = span ((2 ==) . snd) rest
+      n = length us
+      in go (acc . ((nimbers137!!n, (fst $ head us, n)):)) vs
+
+winsChess = (uncurry findChess =<<) . wins . convertChess . zip [0..]
+
+winsChess [0,1,0,2,2,2,0,3,0,0,2,2,2,2,0,3,0,1]
+\end{code}
+
+We demonstrate in a web widget. Here's Treblecross:
 
 \begin{code}
 data Treblecross = Treblecross
   { _board :: [Int]
   , _over :: Bool
   }
+
+setTreblecross t = setGlobal . first (const t) =<< global
+getTreblecross = fst <$> global
 
 ins n = \case
   [] -> [n]
@@ -549,16 +641,19 @@ ins n = \case
 
 rowSize = 30
 
-newGame = do
-  setGlobal $ Treblecross [] False
+newXXX = do
+  setTreblecross $ Treblecross [] False
   jsEval_ $ "drawTreble(" ++ show rowSize ++ ");"
   jsEval_ $ "msg.innerHTML = '<br>';"
+  jsEval_ $ "xxxCanvas.style.display = 'block';"
+  jsEval_ $ "chessCanvas.style.display = 'none';"
+  jsEval_ $ "howto.innerHTML = howtoXXX.innerHTML;"
 
 treble ns start = all (`elem` ns) [start..start+2]
 
 computerWin k = do
-  ns <- _board <$> global
-  setGlobal $ Treblecross (ins k ns) True
+  ns <- _board <$> getTreblecross
+  setTreblecross $ Treblecross (ins k ns) True
   jsEval_ $ "ecks(" ++ show k ++ ");"
   jsEval_ "msg.innerText = `Computer wins`;"
 
@@ -566,17 +661,17 @@ rand n = fromInteger . readInteger <$> jsEval ("Math.floor(Math.random() * " ++ 
 
 click :: Int -> Int -> IO ()
 click x y = do
-  g <- global
+  g <- getTreblecross
   unless (_over g) $ do
     let n = div (x - 5) 20
     when (y >= 5 && y <= 25 && n >= 0 && n < rowSize) $ do
-      ns <- _board <$> global
+      ns <- _board <$> getTreblecross
       unless (elem n ns) do
         ns <- pure $ ins n ns
         jsEval_ $ "ecks(" ++ show n ++ ");"
         \cases
           | any (treble ns) [n-2..n] -> do
-            setGlobal $ Treblecross ns True
+            setTreblecross $ Treblecross ns True
             jsEval_ $ "msg.innerText = `You win!`"
           | (n - 1) `elem` ns -> \cases
             | n >= 2 -> computerWin $ n - 2
@@ -588,12 +683,148 @@ click x y = do
           | (n - 2) `elem` ns -> computerWin $ n - 1
           | otherwise -> do
             let
-              whatever = [0..rowSize - 1] \\ ns
-              ks = maybe whatever id $ best ns rowSize
+              ks = case winsTreblecross ns rowSize of
+                [] -> [0..rowSize - 1] \\ ns
+                ks -> ks
             k <- (ks!!) <$> rand (length ks)
-            setGlobal $ Treblecross (ins k ns) False
+            setTreblecross $ Treblecross (ins k ns) False
             jsEval_ $ "ecks(" ++ show k ++ ");"
+\end{code}
 
-jsEval_ "setup(repl);"
-newGame
+Here's Dawson's Chess, and some calls to kick things off.
+
+\begin{code}
+data DawsonChess = DawsonChess
+  { _chess :: [Int]
+  , _cursor :: Maybe (Int, [Int])
+  , _winner :: Int
+  }
+
+setChess t = setGlobal . second (const t) =<< global
+getChess = snd <$> global
+
+checker c x y w h = jsEval_ $
+    "checker(" ++ intercalate "," (show <$> [c, x, y, w, h]) ++ ")"
+
+chsz = 40
+
+drawCursor r c = do
+  jsEval_ $ "cc.drawImage(fromCanvas," ++ show (c*chsz) ++ "," ++ show (r*chsz) ++ ");"
+
+drawDest c = do
+  jsEval_ $ "cc.drawImage(toCanvas," ++ show (c*chsz) ++ "," ++ show chsz ++ ");"
+replace k v xs = us ++ (v:vs) where (us, _:vs) = splitAt k xs
+
+captureBlack col pos = replace col (go $ pos!!col) pos where
+  go = \case
+    1 -> 7
+    2 -> 4
+    5 -> 3
+    6 -> 0
+
+captureWhite col pos = replace col (go $ pos!!col) pos where
+  go = \case
+    2 -> 6
+    3 -> 5
+    4 -> 0
+    7 -> 1
+
+chessComputer col pos
+  | col > 0 && elem (pos!!pred col) [2,6] =
+      captureBlack (pred col) $ captureBlack col pos
+  | col < length pos - 1 && elem(pos!!succ col) [2,6] =
+      captureBlack (succ col) $ captureBlack col pos
+  | otherwise = case winsChess pos of
+    [] -> let
+      (us, _:vs) = break (== 2) pos
+      in us ++ 3:vs
+    ms -> replace (last ms) 3 pos
+
+chessClick x y = do
+  dc <- getChess
+  when (_winner dc == 0) $ chessClick' dc x y
+
+chessClick' dc x y = do
+  let row = div y chsz
+  let col = div x chsz
+  let pos = _chess dc
+  case _cursor dc of
+    Just (srcCol, moves) -> do
+      if row == 1 && elem col moves then do
+          let
+            stuck = all (`elem` [0,1,3])
+            pos'
+              | col == srcCol = replace col 1 pos
+              | otherwise = captureWhite srcCol $ captureWhite col pos
+
+          if stuck pos' then do
+              setChess dc { _cursor = Nothing, _chess = pos', _winner = 1 }
+              chessDraw pos'
+              jsEval_ $ "msg.innerText = 'You win!'"
+            else do
+              let pos'' = chessComputer col pos'
+              chessDraw pos''
+              if stuck pos'' then do
+                  jsEval_ $ "msg.innerText = 'Computer wins'"
+                  setChess dc { _cursor = Nothing, _chess = pos'', _winner = -1 }
+                else setChess dc { _cursor = Nothing, _chess = pos'' }
+        else do
+          setChess dc { _cursor = Nothing, _chess = pos }
+          jsEval_ "unsnapChess();"
+    Nothing -> do
+      let x = pos!!col
+      \cases
+        | row == 1, elem x [1, 5] -> do
+          setChess dc { _cursor = Just (col, []) }
+          drawCursor 1 col
+        | row == 2, elem x [2, 4] -> do
+          let
+            isCap (a, b) = elem a [2,4] && elem b [3,7]
+            caps =
+              [(k, k + 1) | (k, p) <- zip [0..] $ zip pos $ tail pos, isCap p] ++
+              [(k, k - 1) | (k, p) <- zip [1..] $ zip (tail pos) pos, isCap p]
+            moves = case caps of
+              [] -> [col]
+              _ -> snd <$> filter ((col == ) . fst) caps
+          setChess dc { _cursor = Just (col, moves) }
+          mapM_ drawDest moves
+          drawCursor 2 col
+        | row == 2, elem x [3, 5] -> do
+          setChess dc { _cursor = Just (col, []) }
+          drawCursor 2 col
+        _ -> pure ()
+
+drawFile col = \case
+  0 -> pure ()
+  1 -> wh [1] *> bl [0]
+  2 -> wh [2] *> bl [0]
+  3 -> wh [2] *> bl [1]
+  4 -> wh [2]
+  5 -> wh [1,2]
+  6 -> bl [0]
+  7 -> bl [0,1]
+  where
+  x = col*chsz + 2
+  wh = mapM_ \w -> jsEval_ $ "pawn(`\\u2659`," ++ show x ++ ", " ++ show (w*chsz + 35) ++ ");"
+  bl = mapM_ \b -> jsEval_ $ "pawn(`\\u265f`," ++ show x ++ ", " ++ show (b*chsz + 35) ++ ");"
+
+chessDraw pos = do
+  sequence [checker (mod (x + y) 2) (x*chsz) (y*chsz) chsz chsz
+      | y <- [0..2], x <- [0..length pos - 1]]
+  sequence $ zipWith drawFile [0..] pos
+  jsEval_ "snapChess();"
+
+newChess = do
+  let pos = replicate 16 2
+  setChess $ DawsonChess pos Nothing 0
+  chessDraw pos
+  jsEval_ $ "xxxCanvas.style.display = 'none';"
+  jsEval_ $ "chessCanvas.style.display = 'block';"
+  jsEval_ $ "howto.innerHTML = howtoChess.innerHTML;"
+
+do
+  setGlobal (undefined, undefined)
+  jsEval_ "initXXX(repl);"
+  jsEval $ "initChess(" ++ show chsz ++ ", 5);"
+  newChess
 \end{code}

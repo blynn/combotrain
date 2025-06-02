@@ -141,10 +141,13 @@ score of a position every second ply and alternate between computing minimums
 and maximums, but why not exploit the double negative? Simply use the same
 scoring function for both sides, and always seek the minimum.
 
-Each node of our game tree has a score of zero or one. Reaching zero means
-we've reached a winning position: the opponent eventually will have no moves
-available if we play perfectly. Reaching one means we've reached a losing
-position: if the opponent plays perfectly then we ultimately lose.
+Each node of our game tree has a score of zero or one.
+
+  * Reaching zero means we've reached a winning position: the opponent
+  eventually will have no moves available if we play perfectly.
+
+  * Reaching one means we've reached a losing position: if the opponent plays
+  perfectly then we ultimately lose.
 
 Alpha-beta pruning degenerates to short-circuiting the computation of the
 minimum on encountering a zero, and returning the other value on encountering
@@ -159,7 +162,7 @@ minZ = foldr (\a b -> if a == 0 then 0 else b) 1
 
 minOnly (Node _ kids) = 1 - minZ (minOnly <$> kids)
 
-bestBrute g = toPiles $ snd $ foldr1 go
+best g = toPiles $ snd $ foldr1 go
     $ zip (minOnly . gameTree <$> xs) xs
   where
   xs = nextNims g
@@ -171,13 +174,13 @@ For example, if there is one pile of 5 coins, the best move is to take them
 all:
 
 \begin{code}
-bestBrute [(5, 1)]
+best [(5, 1)]
 \end{code}
 
 For three piles with 2, 3, and 4 coins, it's best to take 3 from the biggest pile:
 
 \begin{code}
-bestBrute $ (,1) <$> [2, 3, 4]
+best $ (,1) <$> [2, 3, 4]
 \end{code}
 
 Adding a pile of \(n\) coins to a game only increases the number of possible
@@ -206,14 +209,12 @@ print $ toPiles . fst <$> filter ((0 ==) . snd)
 == Nimbers ==
 
 "Moreover, there are many ways to be in error...But there is only one way to be
-correct"
+correct."
 -- Aristotle, Nichomachean Ethics, Book 2
 
-Each node of our game tree has a score of zero or one. If our move goes to a
-zero node, then we can force a win: either there are no moves left, or the
-opponent eventually will have no moves available if we play perfectly. Dually,
-if our move goes to a one node, then we've reached a losing position: if the
-opponent plays perfectly then we ultimately lose.
+Recall each node of our game tree has a score of zero or one, and a node has
+score one if and only if we lose by moving to it, assuming the opponent plays
+optimally.
 
 However, it turns out we profit from distinguishing between losing positions.
 Rather than assign each a score of one, we associate a losing position with a
@@ -302,9 +303,10 @@ twoTab n = unlines
 putStr $ twoTab 16
 \end{code}
 
-We study the table to get a feel for nimbers.
-Let \(f(r, c)\) denote the entry at row \(r\) and column \(c\), where we start
-counting rows and columns from zero.
+We study the table to get a feel for two-pile nimbers. Let \(f(r, c)\) denote
+the entry at row \(r\) and column \(c\), where we start counting rows and
+columns from zero. This is the nimber for two piles containing \(r\) and \(c\)
+coins.
 
 A move in this game removes coins from either the \(r\) pile or the \(c\) pile,
 so \(f(r,c)\) is the mex of the \(r\) nimbers above it and the \(c\) nimbers to
@@ -410,19 +412,19 @@ reduces the larger nimber to match the smaller. Our opponent is then forced to
 make a move resulting in unequal nimbers. Iterating this process leads to a
 win, if the game is guaranteed to terminate.
 
-In any game of Nim, by induction, the nimber of a position is the
-XOR of all pile sizes.
+In any game of Nim, by induction, the nimber of a position is the XOR of all
+pile sizes. Thus the winning moves are those that shrink a pile so the XOR
+of all pile sizes is zero.
 
 \begin{code}
 nimber = foldr xor (0 :: Int)
 
-best ns = go ns where
-  go = \case
-    [] -> Nothing
-    n:nt
-      | g <- xor n h, n > g -> Just (n, g)
-      | otherwise -> go nt
-  h = nimber ns
+wins ns =
+    [(k, g) | (k, n) <- zip [0..] ns, let g = xor n $ nimber ns, n > g]
+
+wins [1,2,3]
+wins [42,5,42,42]
+wins [3,5,7]
 \end{code}
 
 No trees. No memoization. A handful of XORs is all we need to play Nim
@@ -435,8 +437,8 @@ game tree.
 == Game On ==
 
 Finding the nimber of a Nim position takes one line of code. Finding the best
-move takes a few more. But demonstrating them with a web widget takes an
-eye-watering mess:
+is another line. But demonstrating them with a web widget takes an eye-watering
+mess:
 
 \begin{code}
 data Nim = Nim
@@ -454,7 +456,7 @@ draw ns = do
     [] -> pure ()
     n:nt -> do
       sequence [jsEval $ concat
-        [ "coin(", show x, ", ", show y, ");" ] | y <- [ 1..n]]
+        [ "coin(", show x, ", ", show y, ");" ] | y <- [1..n]]
       go (succ x) nt
 
 mouseOut = do
@@ -479,8 +481,7 @@ play = do
   unless (_busy g) case _selection g of
     Nothing -> pure ()
     Just (x, y) -> do
-      let ns = _nim g
-      let (us, n:vs) = splitAt x ns
+      let (us, n:vs) = splitAt x $ _nim g
       setGlobal g { _nim = us ++ y:vs, _busy = True }
       jsEval_ "msg.innerText = `Computer's move`;"
       jsEval_ $ concat
@@ -490,32 +491,25 @@ rand n = fromInteger . readInteger <$> jsEval ("Math.floor(Math.random() * " ++ 
 
 yourMove = do
   jsEval_ "msg.innerText = `Your move`;"
-  _selection <$> global >>= \case
-    Nothing -> pure ()
-    Just (x, y) -> mouseMove x y
+  _selection <$> global >>= maybe (pure ()) (uncurry mouseMove)
 
 postfade 0 = do
   g <- global
-  let ns = _nim g
-  draw ns
   let
-    move n n' = do
-      draw ns
-      let (us, _:vs) = break (n ==) ns
-      setGlobal g { _nim = us ++ n':vs }
+    ns = _nim g
+    move k n = do
+      let (us, _:vs) = splitAt k ns
+      setGlobal g { _nim = us ++ n:vs }
       jsEval_ $ concat
-        ["fade(", show (length us + 1), ", ", show (n'+1), ", 1);"]
-
-  case best ns of
-    Nothing -> case filter (0 /=) ns of
-      [] -> do
-        setGlobal g { _busy = False }
-        jsEval_ "victory();"
-      ms -> do
-        m <- (ms!!) <$> rand (length ms)
-        m' <- rand m
-        move m m'
-    Just (n, n') -> move n n'
+        ["fade(", show (k + 1), ", ", show (n+1), ", 1);"]
+    ms = case wins ns of
+      [] -> [move k n' | (k, n) <- zip [0..] ns, n' <- [0..n - 1]]
+      ms -> uncurry move <$> ms
+  draw ns
+  if null ms then do
+      setGlobal g { _busy = False }
+      jsEval_ "victory();"
+    else (ms!!) =<< rand (length ms)
 
 postfade 1 = do
   g <- global
@@ -531,8 +525,7 @@ startGame ns = do
 
 newGame = do
   p <- succ <$> rand 7
-  ns <- replicateM p $ succ <$> rand 10
-  startGame ns
+  startGame =<< replicateM p (succ <$> rand 10)
 
 jsEval_ "setup(repl);"
 startGame [3, 5, 7]
